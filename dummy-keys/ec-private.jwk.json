@@ -1,0 +1,10 @@
+{
+  "kty": "EC",
+  "x": "-FLr1ZUZGDneqDmi-V-upvEjzZjJl-iaKgUe3w2ojWo",
+  "y": "xdNYfhUPeNNe9mIuc_6SxziKxrqME-OcNYA482m-kzY",
+  "crv": "P-256",
+  "d": "yEAZypomOL8Jk21RgD5i291fkmV54yAkGHckWIkcMVo",
+  "kid": "ec-signer-2026",
+  "use": "sig",
+  "alg": "ES256"
+}

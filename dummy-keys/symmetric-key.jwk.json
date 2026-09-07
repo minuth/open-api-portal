@@ -1,0 +1,6 @@
+{
+  "kty": "oct",
+  "k": "U7RdiTAwwHU5XVtcMQoi5ZRCg01OXUFwXdvdbt92_qo",
+  "kid": "symmetric-key-01",
+  "alg": "HS256"
+}

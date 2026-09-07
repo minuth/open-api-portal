@@ -1,0 +1,31 @@
+{
+  "name": "open-api-portal",
+  "version": "1.0.0",
+  "description": "Centralized OpenAPI management portal built with Hono, Hono JSX, HTMX, and Alpine.js",
+  "main": "src/index.tsx",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.tsx",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "db:generate": "drizzle-kit generate",
+    "mock": "npm --prefix mock-server run dev",
+    "mock:test": "npm --prefix mock-server test"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.0",
+    "better-sqlite3": "^13.0.3",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.13.1",
+    "jose": "^6.2.10",
+    "js-yaml": "^5.2.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^26.2.0",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2"
+  }
+}

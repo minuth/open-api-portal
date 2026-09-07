@@ -1,0 +1,113 @@
+# Agent Coding Guidelines: Open API Portal
+
+These guidelines dictate coding conventions, architectural boundaries, and software design standards for all AI agents and developers working in this codebase.
+
+---
+
+## 1. Core Architecture & Tech Stack Rules
+
+### Tech Stack Roles
+* **Backend**: **Hono (TypeScript)** running on Node.js / Bun.
+* **Templating & HTML SSR**: **Hono JSX** (`hono/jsx`).
+  * ⚠️ **CRITICAL**: Do NOT import React or `react-dom`. Hono JSX compiles to pure server-side HTML strings.
+* **Server Interactivity**: **HTMX** (`htmx.min.js`).
+  * Use HTMX attributes (`hx-post`, `hx-get`, `hx-target`, `hx-swap`, `hx-indicator`) for all AJAX server requests and DOM partial swaps.
+* **Client Micro-State**: **Alpine.js** (`alpine.min.js`).
+  * Use Alpine.js (`x-data`, `x-show`, `x-model`, `@click`) strictly for instant client-only DOM manipulations (modals, dynamic key-value rows, collapsible JSON, tooltips). Do NOT make server fetch calls in Alpine.js scripts.
+* **Styling**: Vanilla CSS adhering to a minimal, high-contrast dark theme (Linear/Vercel design style).
+
+### 📦 Dependency & Library Policy
+* **Always Use Latest Stable Libraries**: All AI agents and developers MUST always target, install, and use the latest stable versions of all project dependencies (`hono`, `@hono/node-server`, `js-yaml`, `typescript`, `tsx`, `@types/*`).
+* **No Legacy or Deprecated Packages**: Never introduce outdated APIs or legacy syntax. Always check and use current framework standards.
+* **Fresh Vendored Scripts**: Keep vendored client scripts in `public/js/` (`htmx.min.js`, `alpine.min.js`) updated to their latest stable releases.
+
+---
+
+## 2. SOLID Design Principles (Mandatory)
+
+### 2.1 Single Responsibility Principle (SRP)
+* **Controllers vs. Services**: Hono routes in `src/routes/` are strictly controllers. They must ONLY handle parameter parsing, invoke domain services, and return JSX components. They must **never** perform file I/O, YAML parsing, or HTTP proxying directly.
+* **Service Responsibility**:
+  * `SpecParserService`: Strictly parses and validates OpenAPI YAML specifications.
+  * `StorageService`: Strictly handles local storage file persistence in `./storage/specs/`.
+  * `ApiExecutorService`: Strictly executes outgoing HTTP proxy requests.
+* **UI Components**: Components in `src/components/` must be pure presenter functions that transform props into HTML JSX.
+
+### 2.2 Open/Closed Principle (OCP)
+* **Storage Abstraction**: Always depend on the `IStorageProvider` interface (`saveSpec`, `getSpec`, `listSpecs`). Adding a new storage strategy (e.g. S3 or database) must be done by adding a new provider implementation without modifying existing Hono routes.
+* **Parser Abstraction**: Depend on `ISpecParser` so future spec formats (OpenAPI 3.1, Postman collections) can be introduced without breaking the UI renderer.
+
+### 2.3 Liskov Substitution Principle (LSP)
+* Both `LocalStorageProvider` (`mode=save`) and `MemoryStorageProvider` (`mode=view`) must implement `IStorageProvider` and be fully interchangeable in service calls without breaking runtime guarantees.
+
+### 2.4 Interface Segregation Principle (ISP)
+* Prefer small, narrow, domain-focused interfaces rather than monolithic types:
+  * `ISpecReader` (for reading specs).
+  * `ISpecWriter` (for writing/deleting specs).
+  * `IProxyDispatcher` (for executing target requests).
+
+### 2.5 Dependency Inversion Principle (DIP)
+* High-level controllers and routes must depend on interface abstractions, not concrete class implementations.
+* Inject services via constructor injection or factory initialization helpers to facilitate clean unit testing and mocking.
+
+---
+
+## 3. Clean Code & Implementation Standards
+
+### 3.1 Naming & Function Structure
+* **Meaningful Naming**: Use intent-revealing names (`parseOpenApiYaml`, `targetBaseUrl`, `storageService`). Avoid vague names like `data`, `item`, `res`, `temp`.
+* **Short, Single-Purpose Functions**: Keep functions under 30 lines. Extract complex logic, YAML transformations, and parameter string parsing into pure helper functions.
+
+### 3.2 TypeScript Rigor
+* **Strict Mode**: Maintain `"strict": true` in `tsconfig.json`.
+* **Zero `any`**: Do not use `any`. Define explicit TypeScript interfaces/types in `src/types/openapi.ts`.
+* **Return Types**: Specify explicit return types for all public service methods and Hono JSX component functions.
+
+### 3.3 Error Handling Policy
+* **Domain Errors**: Use explicit domain error classes (`InvalidSpecError`, `StorageError`, `ProxyTimeoutError`).
+* **No Silent Swallowing**: Never wrap code in empty `catch` blocks or return `null` silently.
+* **HTMX Error Partials**: Catch errors in Hono controllers and render human-readable alert partials (`<div class="alert-error">...</div>`) so HTMX can display them to the user cleanly.
+
+### 3.4 DRY (Don't Repeat Yourself)
+* **Component Reuse**: Reuse common UI elements (`Header`, `MethodBadge`, `RequestInputRow`, `AlertBox`).
+* **Centralized Logic**: Centralize header building, query string serialization, and latency calculation helpers.
+
+### 3.5 File & Directory Naming Conventions (Strict Kebab-Case)
+* **Kebab-Case File Names**: All source code files, components, services, routes, types, and styles MUST use `kebab-case` file naming (`spec-parser.ts`, `storage-service.ts`, `api-executor.ts`, `upload-modal.tsx`, `spec-sidebar.tsx`, `spec-detail.tsx`, `request-panel.tsx`, `response-panel.tsx`, `method-badge.tsx`, `alert-box.tsx`, `layout.tsx`, `header.tsx`).
+* **No `camelCase` or `PascalCase` file names**: Never name files with `camelCase` or `PascalCase` (e.g. use `spec-parser.ts` instead of `specParser.ts`).
+
+### 3.6 No Inline Styles Policy (Mandatory Vanilla CSS)
+* **Zero Inline Styles**: Do NOT use inline `style="..."` attributes in JSX component files or Hono route controllers.
+* **Centralized Design System**: Define all component classes, layout helpers, and state modifiers inside `public/css/main.css` utilizing CSS custom properties (`--bg-base`, `--bg-card`, `--text-main`, `--text-muted`, `--border-color`, etc.).
+
+### 3.7 Module Import Conventions (Extensionless Imports)
+* **Omit Extensions**: Omit file extensions in TypeScript relative imports (e.g. `import { UploadModal } from './upload-modal'`).
+* **Bundler Module Resolution**: Maintain `"moduleResolution": "bundler"` in `tsconfig.json`.
+
+### 3.8 UI Design Principles (Linear / Vercel Aesthetic)
+* **High-Contrast Dark Theme & Precision Typography**: Adhere strictly to a clean, modern Linear/Vercel design system. Use Geist sans-serif for UI labels and Geist Mono for code, HTTP methods, and tokens.
+* **No Emoji Placeholders for Structural UI**: Never use raw OS emojis (`🔒`, `⚙`, `🗑`) as primary icons or badges in structural UI layouts. Always use clean, scalable SVG components defined in `src/components/icons.tsx` (`<IconLock />`, `<IconPencil />`, `<IconTrash />`).
+* **Visual Hierarchy & Spacing Rigor**:
+  * Enforce clear horizontal spacing (8px–12px) between icons, text labels, and status badges.
+  * Apply `min-width: 0`, `flex: 1`, and `text-overflow: ellipsis` on text containers so long labels truncate gracefully without squeezing adjacent tags or action buttons.
+* **Consistent Action Button Heights & Alignment**:
+  * All action buttons within list rows must share identical height (e.g. `28px`), uniform padding, and vertical alignment.
+  * Use subtle ghost/border button styles with smooth CSS hover transitions (`transition: background-color 0.12s, border-color 0.12s`).
+* **Subtle Translucent Badges**:
+  * Style status and provider tags (GitHub, GitLab, Local, Sandbox) as compact, mono-spaced pills (`font-size: 0.68rem; padding: 0.15rem 0.5rem`).
+  * Use subtle translucent backgrounds (`rgba(...)`) and matching 20% opacity borders instead of solid block colors.
+
+---
+
+## 4. Directory Structure Guidelines
+
+```
+src/
+├── index.ts                # Hono server initialization & static route mounting
+├── routes/                 # Hono controllers (HTTP input -> Service -> JSX Output)
+├── components/             # Pure Hono JSX presenter components
+├── services/               # Core domain business logic & SOLID interfaces
+└── types/                  # Typed OpenAPI & domain interfaces
+storage/
+└── specs/                  # Local YAML spec storage
+```

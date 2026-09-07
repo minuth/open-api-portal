@@ -1,0 +1,8 @@
+{
+  "kty": "RSA",
+  "n": "yeufvbYa-1Z9DS5xEqvXoBit9jRusHFxW1MOrrBVneC94_4kfrfCcKsfC07WynopRrOdftSWgBiVEj8CH4EnotFeL898LrzGtLJ6lfQexcam3Vmysy3YCV4AxSfaf07PSUG0ZxYnSEKiJH3Rvtdyl5HedUxrl_RKYABQrny-v7FFOIZvUlP3MHd2A_mZIwZrxqC87WEG-_PV2eTmuatlROBaeNeQyNb8bdQPyaH7RrzZZvrIg5t46ziOhepcysh68AzqVDYjTQXsh_LIz-5QXsSnyv-XlvGbqIWMXflXXAh4dPOrF8zy991cP3LL8EDFCd0BgSw-ZCrQYnOmWjgo3Q",
+  "e": "AQAB",
+  "kid": "partner-signer-2026",
+  "use": "sig",
+  "alg": "RS256"
+}
