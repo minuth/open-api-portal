@@ -1,7 +1,8 @@
 import { jsx } from 'hono/jsx'
 import { MethodBadge } from './method-badge'
-import { EndpointOperation, SpecSummary, TagObject } from '../types/openapi'
-import { IconSearch } from './icons'
+import { EndpointOperation, OpenApiDocument, SpecSummary, TagObject } from '../types/openapi'
+import { IconLock, IconSearch } from './icons'
+import { resolveEndpointSecurity } from '../utils/auth-metadata'
 
 export interface SpecSidebarProps {
   specs: SpecSummary[]
@@ -9,6 +10,7 @@ export interface SpecSidebarProps {
   endpoints: EndpointOperation[]
   tags?: TagObject[]
   activeEndpointId?: string
+  spec?: OpenApiDocument
 }
 
 export const SpecSidebar = ({
@@ -16,7 +18,8 @@ export const SpecSidebar = ({
   activeSpecId,
   endpoints,
   tags = [],
-  activeEndpointId
+  activeEndpointId,
+  spec
 }: SpecSidebarProps) => {
   // Group endpoints by tag
   const tagGroups = new Map<string, EndpointOperation[]>()
@@ -121,6 +124,10 @@ export const SpecSidebar = ({
             <div class="tag-group-title">{tagName}</div>
             {groupEndpoints.map((ep) => {
               const searchHaystack = `${ep.method} ${ep.path} ${ep.summary || ''} ${tagName}`.toLowerCase()
+              const isSecured = spec
+                ? resolveEndpointSecurity(ep, spec).isSecured
+                : Boolean(ep.security && ep.security.length > 0)
+
               return (
                 <button
                   type="button"
@@ -138,6 +145,11 @@ export const SpecSidebar = ({
                 >
                   <MethodBadge method={ep.method} />
                   <span class="endpoint-path">{ep.path}</span>
+                  {isSecured && (
+                    <span class="sidebar-endpoint-lock" title="Authentication required">
+                      <IconLock width={10} height={10} />
+                    </span>
+                  )}
                 </button>
               )
             })}

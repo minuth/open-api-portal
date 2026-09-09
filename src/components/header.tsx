@@ -1,14 +1,22 @@
 import { jsx } from 'hono/jsx'
-import { IconSun, IconMoon, IconList, IconUpload, IconLogo, IconGit, IconUserPlus, IconLogOut, IconShield } from './icons'
+import { IconSun, IconMoon, IconList, IconUpload, IconLogo, IconGit, IconUserPlus, IconLogOut, IconShield, IconLock } from './icons'
 import { UserRecord } from '../db/schema'
 
 export interface HeaderProps {
   activeSpecTitle?: string
   activeSpecVersion?: string
   user?: UserRecord | null
+  hasActiveSpec?: boolean
+  hasSecuritySchemes?: boolean
 }
 
-export const Header = ({ activeSpecTitle, activeSpecVersion, user }: HeaderProps) => {
+export const Header = ({
+  activeSpecTitle,
+  activeSpecVersion,
+  user,
+  hasActiveSpec,
+  hasSecuritySchemes
+}: HeaderProps) => {
   const isAdmin = user?.role === 'admin'
   const canConfigToken = user?.role === 'admin' || user?.role === 'editor'
 
@@ -39,6 +47,18 @@ export const Header = ({ activeSpecTitle, activeSpecVersion, user }: HeaderProps
           <IconSun x-show="theme === 'dark'" />
           <IconMoon x-show="theme === 'light'" x-cloak />
         </button>
+
+        {hasActiveSpec && hasSecuritySchemes && (
+          <button
+            type="button"
+            class="btn btn-secondary btn-sm"
+            x-on:click="$dispatch('open-auth-modal')"
+            title="Configure global spec authorization"
+          >
+            <IconLock width={13} height={13} />
+            <span>Authorize</span>
+          </button>
+        )}
 
         <a href="/specs" class="btn btn-secondary btn-sm">
           <IconList width={14} height={14} />

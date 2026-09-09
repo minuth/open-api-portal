@@ -2,7 +2,7 @@ import { jsx } from 'hono/jsx'
 import { MethodBadge } from './method-badge'
 import { RequestPanel } from './request-panel'
 import { ResponsePanel } from './response-panel'
-import { IconLock } from './icons'
+import { IconLock, IconUnlock } from './icons'
 import {
   EndpointOperation,
   OpenApiDocument,
@@ -10,6 +10,7 @@ import {
   ResponseItem,
   SchemaObject
 } from '../types/openapi'
+import { resolveEndpointSecurity } from '../utils/auth-metadata'
 
 export interface SpecDetailProps {
   spec: OpenApiDocument
@@ -17,6 +18,8 @@ export interface SpecDetailProps {
 }
 
 export const SpecDetail = ({ spec, endpoint }: SpecDetailProps) => {
+  const security = resolveEndpointSecurity(endpoint, spec)
+
   return (
     <div class="spec-detail-wrapper" id={endpoint.id} data-endpoint-id={endpoint.id}>
 
@@ -28,6 +31,25 @@ export const SpecDetail = ({ spec, endpoint }: SpecDetailProps) => {
 
           {endpoint.deprecated && (
             <span class="badge badge-danger">Deprecated</span>
+          )}
+
+          {security.isSecured && (
+            <button
+              type="button"
+              class="badge badge-security"
+              title={`Protected by: ${security.schemes.map((s) => s.name).join(', ')}. Click to configure authentication.`}
+              x-on:click={`$dispatch('focus-auth-tab', { endpointId: '${endpoint.id}' })`}
+            >
+              <IconLock width={11} height={11} />
+              <span>{security.primaryScheme?.name || 'Auth'}</span>
+            </button>
+          )}
+
+          {security.isExplicitlyUnsecured && (
+            <span class="badge badge-subtle" title="Explicitly unauthenticated (operation.security = [])">
+              <IconUnlock width={11} height={11} />
+              <span>Public</span>
+            </span>
           )}
 
           {endpoint.joseSecurity && (

@@ -84,7 +84,13 @@ These guidelines dictate coding conventions, architectural boundaries, and softw
 * **Omit Extensions**: Omit file extensions in TypeScript relative imports (e.g. `import { UploadModal } from './upload-modal'`).
 * **Bundler Module Resolution**: Maintain `"moduleResolution": "bundler"` in `tsconfig.json`.
 
-### 3.8 UI Design Principles (Linear / Vercel Aesthetic)
+### 3.8 UI Design Principles: Strict Focus on Minimalism (Linear / Vercel Aesthetic)
+* **Strict Minimalist Focus & Zero Redundancy (Mandatory)**:
+  * **No Box-in-Box Nesting**: Never stack multiple bordered containers or card frames for closely related items. Merge fragmented sub-boxes (e.g., scheme headers, standalone checkbox bars, and credential fields) into a single cohesive, compact card or clean form groups.
+  * **Zero Label & Target Duplication**: Display transmission details, headers, or scheme hints at most ONCE. Never repeat target strings across headers, tags, hints, and preview blocks (e.g., do NOT show `Header (Authorization: Bearer <token>)` in three separate places).
+  * **Integrated Actions over Standalone Bars**: Never create isolated 1-line bordered boxes for single checkboxes or toggles (e.g., "Send unauthenticated"). Integrate secondary controls directly into the section header bar or inline with field labels.
+  * **Spec-Driven Simplicity**: Only render UI sections for schemes and properties explicitly declared in the active specification. Omit all inapplicable categories completely (e.g., never display Basic Auth if the spec only defines Bearer/API Key).
+  * **Compact Footprint & Direct Copy**: Keep modals and panels compact (`width: 460px–500px`), avoiding excessive vertical sprawl. Use concise action labels ("Save", "Cancel", "Clear") over verbose phrases ("Save & Authorize", "Clear Credentials").
 * **High-Contrast Dark Theme & Precision Typography**: Adhere strictly to a clean, modern Linear/Vercel design system. Use Geist sans-serif for UI labels and Geist Mono for code, HTTP methods, and tokens.
 * **No Emoji Placeholders for Structural UI**: Never use raw OS emojis (`🔒`, `⚙`, `🗑`) as primary icons or badges in structural UI layouts. Always use clean, scalable SVG components defined in `src/components/icons.tsx` (`<IconLock />`, `<IconPencil />`, `<IconTrash />`).
 * **Visual Hierarchy & Spacing Rigor**:

@@ -599,6 +599,65 @@ export async function runAllTests() {
       return { status: res.status === 400 ? 200 : res.status, body: await res.json() }
     })
 
+    // --- Authentication Endpoints Tests ---
+    let issuedToken = ''
+    await runTest(20, 'POST /api/v1/auth/token', 'Issue Signed RS256 Bearer JWT Access Token', async () => {
+      const res = await fetch(`${BASE_URL}/api/v1/auth/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          grant_type: 'client_credentials',
+          client_id: 'finsecure-partner-portal-01',
+          client_secret: 'sec_live_9941_partner_token'
+        })
+      })
+      const data = await res.json() as { access_token?: string }
+      if (data.access_token) {
+        issuedToken = data.access_token
+      }
+      return { status: res.status, body: data }
+    })
+
+    await runTest(21, 'GET /api/v1/auth/me', 'Authenticate via Bearer Token', async () => {
+      const res = await fetch(`${BASE_URL}/api/v1/auth/me`, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${issuedToken}` }
+      })
+      return { status: res.status, body: await res.json() }
+    })
+
+    await runTest(22, 'GET /api/v1/auth/me', 'Authenticate via X-API-KEY', async () => {
+      const res = await fetch(`${BASE_URL}/api/v1/auth/me`, {
+        method: 'GET',
+        headers: { 'X-API-KEY': 'finsec_live_partner_gateway_9941' }
+      })
+      return { status: res.status, body: await res.json() }
+    })
+
+    await runTest(23, 'GET /api/v1/auth/me', 'Reject Unauthenticated Request (401)', async () => {
+      const res = await fetch(`${BASE_URL}/api/v1/auth/me`, {
+        method: 'GET'
+      })
+      return { status: res.status === 401 ? 200 : res.status, body: await res.json() }
+    })
+
+    await runTest(24, 'POST /api/v1/auth/api-key', 'Generate Institutional API Key', async () => {
+      const res = await fetch(`${BASE_URL}/api/v1/auth/api-key`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyName: 'Automated Test Agent Key' })
+      })
+      return { status: res.status, body: await res.json() }
+    })
+
+    await runTest(25, 'POST /api/v1/auth/revoke', 'Revoke Active Token / Session', async () => {
+      const res = await fetch(`${BASE_URL}/api/v1/auth/revoke`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${issuedToken}` }
+      })
+      return { status: res.status, body: await res.json() }
+    })
+
     console.log('\n======================================================================')
     console.log(' Test Summary')
     console.log('======================================================================')

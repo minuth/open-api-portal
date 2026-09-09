@@ -7,6 +7,8 @@ import { logServerError } from '../utils/logger'
 import { joseEngineService } from '../services/jose-engine'
 import { JoseSecurityExtension, EphemeralKeyInput, JoseTransformMeta, JoseResponseMeta } from '../types/jose'
 import { ActualRequestData } from '../types/openapi'
+import { buildAuthHeadersAndQuery } from '../utils/auth-metadata'
+import { ClientAuthConfig } from '../types/auth'
 
 export const proxyApp = new Hono()
 const executorService = new ApiExecutorService()
@@ -160,6 +162,19 @@ proxyApp.post('/api/proxy', async (c) => {
       }
     } catch {
       // Ignore parse error
+    }
+
+    // 3b. Parse Auth Configuration and merge credentials
+    const authJson = (bodyData['authJson'] as string) || ''
+    if (authJson && authJson.trim()) {
+      try {
+        const authConfig = JSON.parse(authJson) as ClientAuthConfig
+        const authResult = buildAuthHeadersAndQuery(authConfig)
+        Object.assign(headers, authResult.headers)
+        Object.assign(queryParams, authResult.queryParams)
+      } catch {
+        // Ignore invalid auth config JSON
+      }
     }
 
     // 4. In-Memory JOSE Cryptographic Pipeline (Zero Server Persistence)

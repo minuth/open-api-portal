@@ -114,6 +114,7 @@ specsApp.get('/specs/:id', async (c) => {
       tokens={tokens}
       user={currentUser}
       allUsers={allUsers}
+      spec={spec}
     >
       <div class="portal-workspace">
         <SpecSidebar
@@ -122,6 +123,7 @@ specsApp.get('/specs/:id', async (c) => {
           endpoints={spec.endpoints}
           tags={spec.tags}
           activeEndpointId={activeEndpoint?.id}
+          spec={spec}
         />
         <div id="spec-detail-container" class="main-content">
           {activeEndpoint ? (

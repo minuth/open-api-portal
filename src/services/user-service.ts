@@ -76,11 +76,14 @@ export class UserService {
   public seedInitialAdmin(): UserRecord | null {
     const allUsers = this.listUsers()
     if (allUsers.length === 0) {
-      console.log('[Auth Seed] No users found. Seeding initial admin user (admin / admin123)...')
+      const username = process.env.INITIAL_ADMIN_USERNAME || 'admin'
+      const email = process.env.INITIAL_ADMIN_EMAIL || 'admin@portal.local'
+      const password = process.env.INITIAL_ADMIN_PASSWORD || 'admin123'
+      console.log(`[Auth Seed] No users found. Seeding initial admin user (${username} / ${password})...`)
       return this.createUser({
-        username: 'admin',
-        email: 'admin@portal.local',
-        password: 'admin123',
+        username,
+        email,
+        password,
         role: 'admin'
       })
     }

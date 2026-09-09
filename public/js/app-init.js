@@ -150,3 +150,85 @@ window.checkJoseKeyCompatibility = function (keyFamily, keyRole, expectedFamily,
   return { valid: true, msg: 'Compatible with algorithm requirements' }
 }
 
+window.parseJwtClaims = function (token) {
+  if (!token || typeof token !== 'string') return null
+  var parts = token.trim().split('.')
+  if (parts.length < 2) return null
+
+  try {
+    var decodeB64Url = function (str) {
+      var b64 = str.replace(/-/g, '+').replace(/_/g, '/')
+      while (b64.length % 4) b64 += '='
+      return decodeURIComponent(
+        atob(b64)
+          .split('')
+          .map(function (c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+          })
+          .join('')
+      )
+    }
+
+    var header = JSON.parse(decodeB64Url(parts[0]))
+    var payload = JSON.parse(decodeB64Url(parts[1]))
+    var nowSec = Math.floor(Date.now() / 1000)
+    var isExpired = false
+    var expiresIn = ''
+
+    if (payload.exp && typeof payload.exp === 'number') {
+      if (payload.exp < nowSec) {
+        isExpired = true
+        var diffSec = nowSec - payload.exp
+        var m = Math.floor(diffSec / 60)
+        var h = Math.floor(m / 60)
+        expiresIn = 'Expired ' + (h > 0 ? h + 'h ' + (m % 60) + 'm' : m + 'm') + ' ago'
+      } else {
+        isExpired = false
+        var diffSec = payload.exp - nowSec
+        var m = Math.floor(diffSec / 60)
+        var h = Math.floor(m / 60)
+        expiresIn = 'Expires in ' + (h > 0 ? h + 'h ' + (m % 60) + 'm' : m + 'm')
+      }
+    }
+
+    return {
+      valid: true,
+      header: header,
+      payload: payload,
+      sub: payload.sub || '',
+      iss: payload.iss || '',
+      aud: payload.aud ? (Array.isArray(payload.aud) ? payload.aud.join(', ') : payload.aud) : '',
+      exp: payload.exp,
+      iat: payload.iat,
+      isExpired: isExpired,
+      expiresIn: expiresIn,
+      formattedPayload: JSON.stringify(payload, null, 2),
+      formattedHeader: JSON.stringify(header, null, 2)
+    }
+  } catch (err) {
+    return null
+  }
+}
+
+window.getSpecAuth = function (specId) {
+  if (!specId) return null
+  try {
+    var raw = localStorage.getItem('portal_auth_' + specId)
+    return raw ? JSON.parse(raw) : null
+  } catch (e) {
+    return null
+  }
+}
+
+window.saveSpecAuth = function (specId, authData) {
+  if (!specId) return
+  try {
+    if (!authData) {
+      localStorage.removeItem('portal_auth_' + specId)
+    } else {
+      localStorage.setItem('portal_auth_' + specId, JSON.stringify(authData))
+    }
+  } catch (e) {}
+}
+
+

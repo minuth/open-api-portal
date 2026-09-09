@@ -1,10 +1,12 @@
 import { jsx } from 'hono/jsx'
 import { GitTokenRecord, UserRecord } from '../db/schema'
+import { OpenApiDocument } from '../types/openapi'
 import { Header } from './header'
 import { UploadModal } from './upload-modal'
 import { TokenModal } from './token-modal'
 import { InviteModal } from './invite-modal'
 import { ErrorDialog } from './error-dialog'
+import { AuthModal } from './auth-modal'
 
 export interface LayoutProps {
   title?: string
@@ -13,6 +15,7 @@ export interface LayoutProps {
   tokens?: GitTokenRecord[]
   user?: UserRecord | null
   allUsers?: UserRecord[]
+  spec?: OpenApiDocument
   children?: unknown
 }
 
@@ -23,8 +26,13 @@ export const Layout = ({
   tokens = [],
   user,
   allUsers = [],
+  spec,
   children
 }: LayoutProps) => {
+  const hasSecuritySchemes = Boolean(
+    spec?.securitySchemes && Object.keys(spec.securitySchemes).length > 0
+  )
+
   return (
     <html lang="en">
       <head>
@@ -50,11 +58,16 @@ export const Layout = ({
             activeSpecTitle={activeSpecTitle}
             activeSpecVersion={activeSpecVersion}
             user={user}
+            hasActiveSpec={Boolean(spec || activeSpecTitle)}
+            hasSecuritySchemes={hasSecuritySchemes}
           />
           <main id="app-main" class="main-content">
             {children}
           </main>
         </div>
+
+        {/* Global Spec Auth Modal (Only rendered when specification declares security schemes) */}
+        {hasSecuritySchemes && <AuthModal spec={spec} />}
 
         {/* Global Upload Spec Modal */}
         <UploadModal tokens={tokens} user={user} />

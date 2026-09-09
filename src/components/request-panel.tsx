@@ -9,6 +9,8 @@ import {
   describeEncryptionAlgorithm,
   describeContentCipher
 } from '../utils/jose-metadata'
+import { resolveEndpointSecurity } from '../utils/auth-metadata'
+import { AuthPanel } from './auth-panel'
 
 export interface RequestPanelProps {
   spec: OpenApiDocument
@@ -145,11 +147,13 @@ function parseTypedEntry(key: string, rawVal: unknown): {
   value: string
   type: JoseValueType
   autoNow: boolean
+  required: boolean
 } {
   if (typeof rawVal === 'object' && rawVal !== null && 'type' in rawVal) {
     const desc = rawVal as JoseTypedValueDescriptor
     const type: JoseValueType = desc.type || 'text'
     const autoNow = Boolean(desc.autoNow)
+    const required = Boolean(desc.required)
     let valStr = desc.value !== undefined ? String(desc.value) : ''
     if (!valStr) {
       if (type === 'uuid') {
@@ -162,30 +166,42 @@ function parseTypedEntry(key: string, rawVal: unknown): {
         else if (type === 'date') valStr = new Date().toISOString().split('T')[0]
       }
     }
-    return { key, value: valStr, type, autoNow }
+    return { key, value: valStr, type, autoNow, required }
+  }
+
+  if (typeof rawVal === 'object' && rawVal !== null && 'required' in rawVal) {
+    const desc = rawVal as { required?: boolean; value?: unknown; type?: JoseValueType; autoNow?: boolean }
+    return {
+      key,
+      value: String(desc.value ?? ''),
+      type: desc.type || 'text',
+      autoNow: Boolean(desc.autoNow),
+      required: Boolean(desc.required)
+    }
   }
 
   if (typeof rawVal === 'boolean') {
-    return { key, value: String(rawVal), type: 'boolean', autoNow: false }
+    return { key, value: String(rawVal), type: 'boolean', autoNow: false, required: false }
   }
 
   if (key === 'jti') {
-    return { key, value: String(rawVal || randomUUID()), type: 'uuid', autoNow: false }
+    return { key, value: String(rawVal || randomUUID()), type: 'uuid', autoNow: false, required: false }
   }
 
   if (typeof rawVal === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawVal)) {
-    return { key, value: rawVal, type: 'uuid', autoNow: false }
+    return { key, value: rawVal, type: 'uuid', autoNow: false, required: false }
   }
 
   if ((key === 'iat' || key === 'exp' || key === 'nbf') && (typeof rawVal === 'number' || (typeof rawVal === 'string' && /^\d{10}$/.test(rawVal)))) {
-    return { key, value: String(rawVal), type: 'unix', autoNow: false }
+    return { key, value: String(rawVal), type: 'unix', autoNow: false, required: false }
   }
 
   return {
     key,
     value: typeof rawVal === 'object' ? JSON.stringify(rawVal) : String(rawVal ?? ''),
     type: 'text',
-    autoNow: false
+    autoNow: false,
+    required: false
   }
 }
 
@@ -214,7 +230,7 @@ function JoseProtectedHeadersBuilder({
         <button
           type="button"
           class="btn btn-secondary btn-xs"
-          x-on:click={`${headersVar}.push({ key: '', value: '', type: 'text', autoNow: false, isCrit: false, enabled: true })`}
+          x-on:click={`${headersVar}.push({ key: '', value: '', type: 'text', autoNow: false, isCrit: false, enabled: true, fromSpec: false, required: false })`}
         >
           + Add Header
         </button>
@@ -228,31 +244,43 @@ function JoseProtectedHeadersBuilder({
 
       <template x-for={`(h, idx) in ${headersVar}`} x-bind:key="idx">
         <div class="jose-kv-row">
-          <input type="checkbox" class="checkbox" x-model="h.enabled" title="Enable / Disable header parameter" />
+          <input
+            type="checkbox"
+            class="checkbox"
+            x-model="h.enabled"
+            x-bind:disabled="h.required || h.isCrit"
+            title="Enable / Disable header parameter"
+          />
           <input
             type="text"
-            class="input-bare"
+            x-bind:class="h.fromSpec ? 'input-bare input-bare-readonly' : 'input-bare'"
             placeholder={placeholderKey}
             x-model="h.key"
+            x-bind:readonly="h.fromSpec"
           />
-          <select
-            class="jose-type-select"
-            x-model="h.type"
-            x-on:change={`
-              if (h.type === 'uuid' && (!h.value || !h.value.includes('-'))) { h.value = crypto.randomUUID(); }
-              else if (h.type === 'boolean' && h.value !== 'true' && h.value !== 'false') { h.value = 'true'; }
-              else if (h.type === 'unix' && !h.value) { h.value = Math.floor(Date.now() / 1000); }
-              else if (h.type === 'date' && !h.value) { h.value = new Date().toISOString().split('T')[0]; }
-              else if (h.type === 'datetime' && !h.value) { h.value = new Date().toISOString().slice(0, 16); }
-            `}
-          >
-            <option value="text">text</option>
-            <option value="uuid">uuid</option>
-            <option value="boolean">bool</option>
-            <option value="date">date</option>
-            <option value="datetime">datetime</option>
-            <option value="unix">unix</option>
-          </select>
+          <template x-if="h.fromSpec">
+            <span class="jose-type-badge" x-text="h.type === 'boolean' ? 'bool' : h.type"></span>
+          </template>
+          <template x-if="!h.fromSpec">
+            <select
+              class="jose-type-select"
+              x-model="h.type"
+              x-on:change={`
+                if (h.type === 'uuid' && (!h.value || !h.value.includes('-'))) { h.value = crypto.randomUUID(); }
+                else if (h.type === 'boolean' && h.value !== 'true' && h.value !== 'false') { h.value = 'true'; }
+                else if (h.type === 'unix' && !h.value) { h.value = Math.floor(Date.now() / 1000); }
+                else if (h.type === 'date' && !h.value) { h.value = new Date().toISOString().split('T')[0]; }
+                else if (h.type === 'datetime' && !h.value) { h.value = new Date().toISOString().slice(0, 16); }
+              `}
+            >
+              <option value="text">text</option>
+              <option value="uuid">uuid</option>
+              <option value="boolean">bool</option>
+              <option value="date">date</option>
+              <option value="datetime">datetime</option>
+              <option value="unix">unix</option>
+            </select>
+          </template>
           <div class="row-sep"></div>
 
           {/* Value control by type */}
@@ -352,19 +380,22 @@ function JoseProtectedHeadersBuilder({
           <button
             type="button"
             x-bind:class="h.isCrit ? 'btn-crit-toggle active' : 'btn-crit-toggle inactive'"
-            x-on:click="h.isCrit = !h.isCrit"
+            x-on:click="if (!(h.fromSpec && (h.required || h.isCrit))) h.isCrit = !h.isCrit"
+            x-bind:disabled="h.fromSpec && (h.required || h.isCrit)"
             title="Toggle RFC Critical parameter (crit)"
           >
             <span x-text="h.isCrit ? 'CRIT' : 'crit'"></span>
           </button>
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs text-subtle"
-            x-on:click={`${headersVar}.splice(idx, 1)`}
-            title="Remove parameter"
-          >
-            <IconClose width={12} height={12} />
-          </button>
+          <template x-if="!h.required && !h.isCrit">
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs text-subtle"
+              x-on:click={`${headersVar}.splice(idx, 1)`}
+              title="Remove parameter"
+            >
+              <IconClose width={12} height={12} />
+            </button>
+          </template>
         </div>
       </template>
     </div>
@@ -396,7 +427,7 @@ function JosePayloadClaimsBuilder({
         <button
           type="button"
           class="btn btn-secondary btn-xs"
-          x-on:click={`${claimsVar}.push({ key: '', value: '', type: 'text', autoNow: false, enabled: true })`}
+          x-on:click={`${claimsVar}.push({ key: '', value: '', type: 'text', autoNow: false, enabled: true, fromSpec: false, required: false })`}
         >
           + Add Claim
         </button>
@@ -410,31 +441,43 @@ function JosePayloadClaimsBuilder({
 
       <template x-for={`(c, idx) in ${claimsVar}`} x-bind:key="idx">
         <div class="jose-claim-row">
-          <input type="checkbox" class="checkbox" x-model="c.enabled" title="Enable / Disable payload claim" />
+          <input
+            type="checkbox"
+            class="checkbox"
+            x-model="c.enabled"
+            x-bind:disabled="c.required"
+            title="Enable / Disable payload claim"
+          />
           <input
             type="text"
-            class="input-bare"
+            x-bind:class="c.fromSpec ? 'input-bare input-bare-readonly' : 'input-bare'"
             placeholder={placeholderKey}
             x-model="c.key"
+            x-bind:readonly="c.fromSpec"
           />
-          <select
-            class="jose-type-select"
-            x-model="c.type"
-            x-on:change={`
-              if (c.type === 'uuid' && (!c.value || !c.value.includes('-'))) { c.value = crypto.randomUUID(); }
-              else if (c.type === 'boolean' && c.value !== 'true' && c.value !== 'false') { c.value = 'true'; }
-              else if (c.type === 'unix' && !c.value) { c.value = Math.floor(Date.now() / 1000); }
-              else if (c.type === 'date' && !c.value) { c.value = new Date().toISOString().split('T')[0]; }
-              else if (c.type === 'datetime' && !c.value) { c.value = new Date().toISOString().slice(0, 16); }
-            `}
-          >
-            <option value="text">text</option>
-            <option value="uuid">uuid</option>
-            <option value="boolean">bool</option>
-            <option value="date">date</option>
-            <option value="datetime">datetime</option>
-            <option value="unix">unix</option>
-          </select>
+          <template x-if="c.fromSpec">
+            <span class="jose-type-badge" x-text="c.type === 'boolean' ? 'bool' : c.type"></span>
+          </template>
+          <template x-if="!c.fromSpec">
+            <select
+              class="jose-type-select"
+              x-model="c.type"
+              x-on:change={`
+                if (c.type === 'uuid' && (!c.value || !c.value.includes('-'))) { c.value = crypto.randomUUID(); }
+                else if (c.type === 'boolean' && c.value !== 'true' && c.value !== 'false') { c.value = 'true'; }
+                else if (c.type === 'unix' && !c.value) { c.value = Math.floor(Date.now() / 1000); }
+                else if (c.type === 'date' && !c.value) { c.value = new Date().toISOString().split('T')[0]; }
+                else if (c.type === 'datetime' && !c.value) { c.value = new Date().toISOString().slice(0, 16); }
+              `}
+            >
+              <option value="text">text</option>
+              <option value="uuid">uuid</option>
+              <option value="boolean">bool</option>
+              <option value="date">date</option>
+              <option value="datetime">datetime</option>
+              <option value="unix">unix</option>
+            </select>
+          </template>
           <div class="row-sep"></div>
 
           {/* Value control by type */}
@@ -531,14 +574,16 @@ function JosePayloadClaimsBuilder({
             </div>
           </template>
 
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs text-subtle"
-            x-on:click={`${claimsVar}.splice(idx, 1)`}
-            title="Remove claim"
-          >
-            <IconClose width={12} height={12} />
-          </button>
+          <template x-if="!c.required">
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs text-subtle"
+              x-on:click={`${claimsVar}.splice(idx, 1)`}
+              title="Remove claim"
+            >
+              <IconClose width={12} height={12} />
+            </button>
+          </template>
         </div>
       </template>
     </div>
@@ -559,7 +604,9 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
     .map((p) => ({
       key: p.name,
       value: String(p.example || p.schema?.default || ''),
-      enabled: true
+      enabled: true,
+      required: Boolean(p.required),
+      fromSpec: true
     }))
 
   const joseConfig = endpoint.joseSecurity
@@ -583,7 +630,9 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
     .map((p) => ({
       key: p.name,
       value: String(p.example || p.schema?.default || ''),
-      enabled: true
+      enabled: true,
+      required: Boolean(p.required),
+      fromSpec: true
     }))
 
   const explicitRequiredHeaders = (endpoint.parameters || []).filter(
@@ -593,22 +642,52 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
   const defaultSampleBody = getDefaultSampleBody(endpoint, spec)
   const isPayloadMethod = ['post', 'put', 'patch'].includes(endpoint.method.toLowerCase())
 
-  const initialTab = isPayloadMethod ? 'body' : (pathParams.length > 0 || defaultQueryParams.length > 0 ? 'params' : 'headers')
+  const securityInfo = resolveEndpointSecurity(endpoint, spec)
+  const primaryScheme = securityInfo.primaryScheme
+  const defaultAuthType = primaryScheme ? primaryScheme.type : 'none'
+
+  const hasParams = pathParams.length > 0 || defaultQueryParams.length > 0
+  const hasRequestBody = isPayloadMethod && (Boolean(endpoint.requestBody?.content && Object.keys(endpoint.requestBody.content).length > 0) || Boolean(defaultSampleBody && defaultSampleBody.trim() !== ''))
+  const hasDeclaredHeaders = defaultHeaders.length > 0 || explicitRequiredHeaders.length > 0 || Boolean(requiredJoseHeaderName)
+  const hasAuth = securityInfo.isSecured
+  const hasJose = Boolean(joseConfig)
+
+  const availableTabs: Array<{ id: string; label: string; count?: number; icon?: string }> = []
+  if (hasParams) {
+    availableTabs.push({ id: 'params', label: 'Params', count: pathParams.length + defaultQueryParams.length })
+  }
+  if (hasRequestBody) {
+    availableTabs.push({ id: 'body', label: 'Body' })
+  }
+  if (hasAuth) {
+    availableTabs.push({ id: 'auth', label: 'Auth', icon: 'lock' })
+  }
+  if (hasDeclaredHeaders) {
+    availableTabs.push({ id: 'headers', label: 'Headers', count: defaultHeaders.length + (requiredJoseHeaderName ? 1 : 0) + explicitRequiredHeaders.length })
+  }
+  if (hasJose) {
+    availableTabs.push({ id: 'jose', label: 'JOSE Security', icon: 'lock' })
+  }
+
+  const initialTab = availableTabs[0]?.id || 'none'
   const defaultSignKid = joseConfig?.sign?.kid || ''
   const defaultEncKid = joseConfig?.encrypt?.kid || ''
 
   // JWS protected headers initialization
-  const defaultJoseSignHeaders: Array<{ key: string; value: string; type: JoseValueType; autoNow: boolean; isCrit: boolean; enabled: boolean }> = []
+  const defaultJoseSignHeaders: Array<{ key: string; value: string; type: JoseValueType; autoNow: boolean; isCrit: boolean; enabled: boolean; fromSpec: boolean; required: boolean }> = []
   const signCritSet = new Set<string>(joseConfig?.sign?.crit || [])
 
   if (joseConfig?.sign?.b64 !== undefined) {
+    const isCrit = signCritSet.has('b64')
     defaultJoseSignHeaders.push({
       key: 'b64',
       value: String(joseConfig.sign.b64),
       type: 'boolean',
       autoNow: false,
-      isCrit: signCritSet.has('b64'),
-      enabled: true
+      isCrit,
+      enabled: true,
+      fromSpec: true,
+      required: isCrit
     })
   }
 
@@ -616,10 +695,13 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
     for (const [k, v] of Object.entries(joseConfig.sign.customHeaders)) {
       if (k === 'b64') continue
       const parsed = parseTypedEntry(k, v)
+      const isCrit = signCritSet.has(k)
       defaultJoseSignHeaders.push({
         ...parsed,
-        isCrit: signCritSet.has(k),
-        enabled: true
+        isCrit,
+        enabled: true,
+        fromSpec: true,
+        required: isCrit || parsed.required
       })
     }
   }
@@ -632,46 +714,56 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
         type: 'boolean',
         autoNow: false,
         isCrit: true,
-        enabled: true
+        enabled: true,
+        fromSpec: true,
+        required: true
       })
     }
   }
 
   // JWS payload claims initialization
-  const defaultJoseClaims: Array<{ key: string; value: string; type: JoseValueType; autoNow: boolean; enabled: boolean }> = []
+  const defaultJoseClaims: Array<{ key: string; value: string; type: JoseValueType; autoNow: boolean; enabled: boolean; fromSpec: boolean; required: boolean }> = []
   if (joseConfig?.sign?.claims) {
     for (const [k, v] of Object.entries(joseConfig.sign.claims)) {
       const parsed = parseTypedEntry(k, v)
       defaultJoseClaims.push({
         ...parsed,
-        enabled: true
+        enabled: true,
+        fromSpec: true,
+        required: parsed.required
       })
     }
   }
 
   // JWE protected headers initialization
-  const defaultJoseEncHeaders: Array<{ key: string; value: string; type: JoseValueType; autoNow: boolean; isCrit: boolean; enabled: boolean }> = []
+  const defaultJoseEncHeaders: Array<{ key: string; value: string; type: JoseValueType; autoNow: boolean; isCrit: boolean; enabled: boolean; fromSpec: boolean; required: boolean }> = []
   const encCritSet = new Set<string>(joseConfig?.encrypt?.crit || [])
 
-  if (joseConfig?.encrypt?.cty) {
+  if (joseConfig?.encrypt?.cty !== undefined) {
+    const isCrit = encCritSet.has('cty')
     defaultJoseEncHeaders.push({
       key: 'cty',
       value: String(joseConfig.encrypt.cty),
       type: 'text',
       autoNow: false,
-      isCrit: encCritSet.has('cty'),
-      enabled: true
+      isCrit,
+      enabled: true,
+      fromSpec: true,
+      required: isCrit
     })
   }
 
-  if (joseConfig?.encrypt?.zip) {
+  if (joseConfig?.encrypt?.zip !== undefined) {
+    const isCrit = encCritSet.has('zip')
     defaultJoseEncHeaders.push({
       key: 'zip',
       value: String(joseConfig.encrypt.zip),
       type: 'text',
       autoNow: false,
-      isCrit: encCritSet.has('zip'),
-      enabled: true
+      isCrit,
+      enabled: true,
+      fromSpec: true,
+      required: isCrit
     })
   }
 
@@ -679,10 +771,13 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
     for (const [k, v] of Object.entries(joseConfig.encrypt.customHeaders)) {
       if (k === 'cty' || k === 'zip') continue
       const parsed = parseTypedEntry(k, v)
+      const isCrit = encCritSet.has(k)
       defaultJoseEncHeaders.push({
         ...parsed,
-        isCrit: encCritSet.has(k),
-        enabled: true
+        isCrit,
+        enabled: true,
+        fromSpec: true,
+        required: isCrit || parsed.required
       })
     }
   }
@@ -695,7 +790,9 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
         type: 'boolean',
         autoNow: false,
         isCrit: true,
-        enabled: true
+        enabled: true,
+        fromSpec: true,
+        required: true
       })
     }
   }
@@ -703,18 +800,20 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
   const defaultJoseHeaders = [...defaultJoseSignHeaders, ...defaultJoseEncHeaders]
 
   // JWE payload claims initialization
-  const defaultJoseEncClaims: Array<{ key: string; value: string; type: JoseValueType; autoNow: boolean; enabled: boolean }> = []
+  const defaultJoseEncClaims: Array<{ key: string; value: string; type: JoseValueType; autoNow: boolean; enabled: boolean; fromSpec: boolean; required: boolean }> = []
   if (joseConfig?.encrypt?.claims) {
     for (const [k, v] of Object.entries(joseConfig.encrypt.claims)) {
       const parsed = parseTypedEntry(k, v)
       defaultJoseEncClaims.push({
         ...parsed,
-        enabled: true
+        enabled: true,
+        fromSpec: true,
+        required: parsed.required
       })
     }
   }
 
-  const alpineState = JSON.stringify({
+  const baseAlpineState = {
     activeTab: initialTab,
     baseUrl: defaultBaseUrl,
     pathParams: Object.fromEntries(pathParams.map((p) => [p.name, String(p.example || '1')])),
@@ -749,11 +848,144 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
     joseEncryptionKid: defaultEncKid,
     joseEncryptionKeyStatus: 'No encryption key loaded',
     joseEncryptionKeyInspector: null,
-    joseEncryptionKeyCompat: { valid: true, msg: 'No encryption key loaded' }
-  })
+    joseEncryptionKeyCompat: { valid: true, msg: 'No encryption key loaded' },
+    specId: spec.id,
+    endpointSchemes: securityInfo.schemes,
+    auth: {
+      type: defaultAuthType,
+      schemeName: primaryScheme?.name || '',
+      token: '',
+      bearerPrefix: 'Bearer',
+      apiKeyName: primaryScheme?.keyName || 'X-API-KEY',
+      apiKeyValue: '',
+      apiKeyPlacement: primaryScheme?.placement || 'header',
+      username: '',
+      password: '',
+      disabled: false
+    },
+    authDeclaredScopes: primaryScheme?.scopes || [],
+    authSchemeDescription: primaryScheme?.description || '',
+    showAuthSecret: false,
+    jwtClaims: null,
+    showJwtDetails: false,
+    hasGlobalAuth: false,
+    showCustomInputs: false
+  }
 
   return (
-    <div class="request-runner" x-data={`(${alpineState})`}>
+    <div
+      class="request-runner"
+      x-data={`{
+        ...${JSON.stringify(baseAlpineState)},
+
+        init() {
+          this.checkGlobalAuth();
+          window.addEventListener('spec-auth-updated', () => {
+            this.checkGlobalAuth();
+          });
+          window.addEventListener('focus-auth-tab', (e) => {
+            if (!e.detail || !e.detail.endpointId || e.detail.endpointId === '${endpoint.id}') {
+              if (${hasAuth}) {
+                this.activeTab = 'auth';
+              }
+            }
+          });
+        },
+
+        checkGlobalAuth() {
+          if (!this.specId) return;
+          const g = window.getSpecAuth ? window.getSpecAuth(this.specId) : null;
+          this.hasGlobalAuth = Boolean(g && (g.bearerToken || g.apiKeyValue || g.basicUser));
+          if (g && !this.auth.disabled) {
+            this.applyGlobalAuth(g);
+          }
+        },
+
+        applyGlobalAuth(g) {
+          if ((this.auth.type === 'bearer' || this.auth.type === 'oauth2' || this.auth.type === 'openIdConnect') && g.bearerToken) {
+            if (!this.auth.token) this.auth.token = g.bearerToken;
+          }
+          if (this.auth.type === 'apiKey' && g.apiKeyValue) {
+            if (!this.auth.apiKeyValue) this.auth.apiKeyValue = g.apiKeyValue;
+            if (g.apiKeyName && !this.auth.apiKeyName) this.auth.apiKeyName = g.apiKeyName;
+            if (g.apiKeyPlacement && !this.auth.apiKeyPlacement) this.auth.apiKeyPlacement = g.apiKeyPlacement;
+          }
+          if (this.auth.type === 'basic' && (g.basicUser || g.basicPass)) {
+            if (!this.auth.username) this.auth.username = g.basicUser || '';
+            if (!this.auth.password) this.auth.password = g.basicPass || '';
+          }
+          this.updateJwtInspector();
+        },
+
+        selectEndpointScheme(schemeName) {
+          const target = this.endpointSchemes.find(s => s.name === schemeName);
+          if (target) {
+            this.auth.schemeName = target.name;
+            this.auth.type = target.type;
+            if (target.keyName) this.auth.apiKeyName = target.keyName;
+            if (target.placement) this.auth.apiKeyPlacement = target.placement;
+            this.authDeclaredScopes = target.scopes || [];
+            this.authSchemeDescription = target.description || '';
+            this.checkGlobalAuth();
+            this.updateJwtInspector();
+          }
+        },
+
+        updateJwtInspector() {
+          if (window.parseJwtClaims && this.auth.token) {
+            this.jwtClaims = window.parseJwtClaims(this.auth.token);
+          } else {
+            this.jwtClaims = null;
+          }
+        },
+
+        isAuthActive() {
+          if (this.auth.disabled || this.auth.type === 'none') return false;
+          if (this.auth.type === 'bearer' || this.auth.type === 'oauth2' || this.auth.type === 'openIdConnect') {
+            return Boolean(this.auth.token);
+          }
+          if (this.auth.type === 'apiKey') {
+            return Boolean(this.auth.apiKeyValue);
+          }
+          if (this.auth.type === 'basic') {
+            return Boolean(this.auth.username || this.auth.password);
+          }
+          return false;
+        },
+
+        getEffectiveAuth() {
+          if (this.auth.disabled || this.auth.type === 'none') {
+            return { type: 'none' };
+          }
+          if (this.auth.type === 'bearer' || this.auth.type === 'oauth2' || this.auth.type === 'openIdConnect') {
+            return {
+              type: 'bearer',
+              schemeName: this.auth.schemeName,
+              token: this.auth.token,
+              bearerPrefix: this.auth.bearerPrefix || 'Bearer'
+            };
+          }
+          if (this.auth.type === 'apiKey') {
+            return {
+              type: 'apiKey',
+              schemeName: this.auth.schemeName,
+              apiKeyName: this.auth.apiKeyName,
+              apiKeyValue: this.auth.apiKeyValue,
+              apiKeyPlacement: this.auth.apiKeyPlacement || 'header'
+            };
+          }
+          if (this.auth.type === 'basic') {
+            return {
+              type: 'basic',
+              schemeName: this.auth.schemeName,
+              username: this.auth.username,
+              password: this.auth.password
+            };
+          }
+          return { type: 'none' };
+        }
+      }`}
+    >
       {joseConfig && (
         <JoseSecurityBar joseSecurity={joseConfig} />
       )}
@@ -804,6 +1036,7 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
         <input type="hidden" name="pathParamsJson" x-bind:value="JSON.stringify(pathParams)" />
         <input type="hidden" name="queryParamsJson" x-bind:value="JSON.stringify(queryParams.filter(q => q.enabled && q.key.trim()))" />
         <input type="hidden" name="headersJson" x-bind:value="JSON.stringify(headers.filter(h => h.enabled && h.key.trim()))" />
+        <input type="hidden" name="authJson" x-bind:value="JSON.stringify(getEffectiveAuth())" />
         <input type="hidden" name="body" x-bind:value="body" />
         {joseConfig && (
           <>
@@ -852,170 +1085,201 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
           </div>
         </div>
 
-        {/* Edge-to-Edge Tabs Bar */}
-        <div class="tab-bar">
-          <button
-            type="button"
-            x-on:click="activeTab = 'params'"
-            x-bind:class="activeTab === 'params' ? 'tab-button active' : 'tab-button'"
-          >
-            Params {(pathParams.length > 0 || defaultQueryParams.length > 0) ? `(${pathParams.length + defaultQueryParams.length})` : ''}
-          </button>
-
-          <button
-            type="button"
-            x-on:click="activeTab = 'headers'"
-            x-bind:class="activeTab === 'headers' ? 'tab-button active' : 'tab-button'"
-          >
-            Headers {`(${(defaultHeaders.length + (requiredJoseHeaderName ? 1 : 0) + explicitRequiredHeaders.length)})`}
-          </button>
-
-          {isPayloadMethod && (
-            <button
-              type="button"
-              x-on:click="activeTab = 'body'"
-              x-bind:class="activeTab === 'body' ? 'tab-button active' : 'tab-button'"
-            >
-              Body
-            </button>
-          )}
-
-          {joseConfig && (
-            <button
-              type="button"
-              x-on:click="activeTab = 'jose'"
-              x-bind:class="activeTab === 'jose' ? 'tab-button active' : 'tab-button'"
-            >
-              <IconLock width={12} height={12} /> JOSE Security
-            </button>
-          )}
-        </div>
-
-        {/* Unified Tab Content Area with consistent padding */}
-        <div class="request-tab-content">
-
-          {/* TAB 1: PARAMS (Path + Query) */}
-          <div x-show="activeTab === 'params'" class="form-group">
-            {/* Path Parameters */}
-            {pathParams.length > 0 && (
-              <div class="kv-section">
-                <div class="kv-builder-header">
-                  <span class="form-label">Path Parameters</span>
-                </div>
-                <div class="path-params-rows">
-                  {pathParams.map((p: ParameterItem) => (
-                    <div key={p.name} class="path-param-row">
-                      <span class="path-param-label">{p.name} *</span>
-                      <input
-                        type="text"
-                        class="input"
-                        x-model={`pathParams['${p.name}']`}
-                        placeholder={p.description || p.name}
-                        required
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Query Parameters */}
-            <div class="kv-section">
-              <div class="kv-builder-header">
-                <span class="form-label">Query Parameters</span>
+        {availableTabs.length > 0 ? (
+          <>
+            {/* Edge-to-Edge Tabs Bar */}
+            <div class="tab-bar">
+              {availableTabs.map((t) => (
                 <button
                   type="button"
-                  class="btn btn-secondary btn-sm"
-                  x-on:click="queryParams.push({ key: '', value: '', enabled: true })"
+                  key={t.id}
+                  x-on:click={`activeTab = '${t.id}'`}
+                  x-bind:class={`activeTab === '${t.id}' ? 'tab-button active' : 'tab-button'`}
                 >
-                  + Add Param
+                  {t.icon === 'lock' && <IconLock width={12} height={12} />}
+                  <span>{t.label}</span>
+                  {t.count !== undefined && t.count > 0 && <span class="tab-count-pill">({t.count})</span>}
+                  {t.id === 'auth' && <span class="tab-auth-indicator" x-show="isAuthActive()" x-cloak></span>}
                 </button>
-              </div>
+              ))}
 
-              <div class="kv-builder-rows">
-                <template x-for="(q, idx) in queryParams" x-bind:key="idx">
-                  <div class="kv-row">
-                    <input type="checkbox" class="kv-checkbox" x-model="q.enabled" />
-                    <input type="text" class="kv-input" placeholder="Key" x-model="q.key" />
-                    <div class="kv-divider"></div>
-                    <input type="text" class="kv-input" placeholder="Value" x-model="q.value" />
-                    <button
-                      type="button"
-                      class="kv-remove-btn"
-                      x-on:click="queryParams.splice(idx, 1)"
-                      aria-label="Remove"
-                    ><IconClose width={12} height={12} /></button>
-                  </div>
-                </template>
-              </div>
-            </div>
-          </div>
-
-          {/* TAB 2: HEADERS */}
-          <div x-show="activeTab === 'headers'" class="form-group">
-            {/* Required Headers Notices */}
-            {(requiredJoseHeaderName || explicitRequiredHeaders.length > 0) && (
-              <div class="required-headers-container">
-                {requiredJoseHeaderName && (
-                  <div class="required-header-card">
-                    <div class="required-header-info">
-                      <span class="badge-required">Required</span>
-                      <code class="required-header-name">{requiredJoseHeaderName}</code>
-                    </div>
-                    <span class="required-header-note">
-                      <IconLock width={12} height={12} /> Auto-generated via JOSE {joseConfig?.mode?.toUpperCase()} ({joseConfig?.sign ? joseConfig.sign.alg : joseConfig?.encrypt?.alg}) on send
-                    </span>
-                  </div>
-                )}
-                {explicitRequiredHeaders.map((rh) => (
-                  <div key={rh.name} class="required-header-card">
-                    <div class="required-header-info">
-                      <span class="badge-required">Required</span>
-                      <code class="required-header-name">{rh.name}</code>
-                    </div>
-                    <span class="required-header-note">
-                      {rh.description || 'Required by API specification'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Custom Headers Builder */}
-            <div class="kv-section">
-              <div class="kv-builder-header">
-                <span class="form-label">HTTP Headers</span>
+              {(!hasDeclaredHeaders || !hasParams) && (
                 <button
                   type="button"
-                  class="btn btn-secondary btn-sm"
-                  x-on:click="headers.push({ key: '', value: '', enabled: true })"
+                  class="tab-button tab-button-options"
+                  x-on:click="showCustomInputs = !showCustomInputs"
+                  x-bind:class="showCustomInputs ? 'active' : ''"
+                  title="Toggle optional custom query parameters and request headers overrides"
                 >
-                  + Add Header
+                  <span x-text="showCustomInputs ? '− Options' : '+ Options'"></span>
                 </button>
-              </div>
-
-              <div class="kv-builder-rows">
-                <template x-for="(h, idx) in headers" x-bind:key="idx">
-                  <div class="kv-row">
-                    <input type="checkbox" class="kv-checkbox" x-model="h.enabled" />
-                    <input type="text" class="kv-input" placeholder="Header Name" x-model="h.key" />
-                    <div class="kv-divider"></div>
-                    <input type="text" class="kv-input" placeholder="Value" x-model="h.value" />
-                    <button
-                      type="button"
-                      class="kv-remove-btn"
-                      x-on:click="headers.splice(idx, 1)"
-                      aria-label="Remove"
-                    ><IconClose width={12} height={12} /></button>
-                  </div>
-                </template>
-              </div>
+              )}
             </div>
-          </div>
 
-          {/* TAB 3: BODY */}
-          {isPayloadMethod && (
-            <div x-show="activeTab === 'body'" class="form-field">
+            {/* Unified Tab Content Area with consistent padding */}
+            <div class="request-tab-content">
+
+              {/* TAB 0: AUTH (Only if declared in spec) */}
+              {hasAuth && (
+                <div x-show="activeTab === 'auth'" class="form-group" x-cloak>
+                  <AuthPanel spec={spec} endpoint={endpoint} securityInfo={securityInfo} />
+                </div>
+              )}
+
+              {/* TAB 1: PARAMS (Path + Query) */}
+              {hasParams && (
+                <div x-show="activeTab === 'params'" class="form-group">
+                  {/* Path Parameters */}
+                  {pathParams.length > 0 && (
+                    <div class="kv-section">
+                      <div class="kv-builder-header">
+                        <span class="form-label">Path Parameters</span>
+                      </div>
+                      <div class="path-params-rows">
+                        {pathParams.map((p: ParameterItem) => (
+                          <div key={p.name} class="path-param-row">
+                            <span class="path-param-label">{p.name} *</span>
+                            <input
+                              type="text"
+                              class="input"
+                              x-model={`pathParams['${p.name}']`}
+                              placeholder={p.description || p.name}
+                              required
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Query Parameters (if declared in spec) */}
+                  {defaultQueryParams.length > 0 && (
+                    <div class="kv-section">
+                      <div class="kv-builder-header">
+                        <span class="form-label">Query Parameters</span>
+                        <button
+                          type="button"
+                          class="btn btn-secondary btn-sm"
+                          x-on:click="queryParams.push({ key: '', value: '', enabled: true, fromSpec: false, required: false })"
+                        >
+                          + Add Param
+                        </button>
+                      </div>
+
+                      <div class="kv-builder-rows">
+                        <template x-for="(q, idx) in queryParams" x-bind:key="idx">
+                          <div class="kv-row">
+                            <input
+                              type="checkbox"
+                              class="kv-checkbox"
+                              x-model="q.enabled"
+                              x-bind:disabled="q.required"
+                            />
+                            <input
+                              type="text"
+                              x-bind:class="q.fromSpec ? 'kv-input kv-input-readonly' : 'kv-input'"
+                              placeholder="Key"
+                              x-model="q.key"
+                              x-bind:readonly="q.fromSpec"
+                            />
+                            <div class="kv-divider"></div>
+                            <input type="text" class="kv-input" placeholder="Value" x-model="q.value" />
+                            <template x-if="!q.required">
+                              <button
+                                type="button"
+                                class="kv-remove-btn"
+                                x-on:click="queryParams.splice(idx, 1)"
+                                aria-label="Remove"
+                              ><IconClose width={12} height={12} /></button>
+                            </template>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 2: HEADERS */}
+              {hasDeclaredHeaders && (
+                <div x-show="activeTab === 'headers'" class="form-group">
+                  {/* Required Headers Notices */}
+                  {(requiredJoseHeaderName || explicitRequiredHeaders.length > 0) && (
+                    <div class="required-headers-container">
+                      {requiredJoseHeaderName && (
+                        <div class="required-header-card">
+                          <div class="required-header-info">
+                            <span class="badge-required">Required</span>
+                            <code class="required-header-name">{requiredJoseHeaderName}</code>
+                          </div>
+                          <span class="required-header-note">
+                            <IconLock width={12} height={12} /> Auto-generated via JOSE {joseConfig?.mode?.toUpperCase()} ({joseConfig?.sign ? joseConfig.sign.alg : joseConfig?.encrypt?.alg}) on send
+                          </span>
+                        </div>
+                      )}
+                      {explicitRequiredHeaders.map((rh) => (
+                        <div key={rh.name} class="required-header-card">
+                          <div class="required-header-info">
+                            <span class="badge-required">Required</span>
+                            <code class="required-header-name">{rh.name}</code>
+                          </div>
+                          <span class="required-header-note">
+                            {rh.description || 'Required by API specification'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Custom Headers Builder */}
+                  <div class="kv-section">
+                    <div class="kv-builder-header">
+                      <span class="form-label">HTTP Headers</span>
+                      <button
+                        type="button"
+                        class="btn btn-secondary btn-sm"
+                        x-on:click="headers.push({ key: '', value: '', enabled: true, fromSpec: false, required: false })"
+                      >
+                        + Add Header
+                      </button>
+                    </div>
+
+                    <div class="kv-builder-rows">
+                      <template x-for="(h, idx) in headers" x-bind:key="idx">
+                        <div class="kv-row">
+                          <input
+                            type="checkbox"
+                            class="kv-checkbox"
+                            x-model="h.enabled"
+                            x-bind:disabled="h.required"
+                          />
+                          <input
+                            type="text"
+                            x-bind:class="h.fromSpec ? 'kv-input kv-input-readonly' : 'kv-input'"
+                            placeholder="Header Name"
+                            x-model="h.key"
+                            x-bind:readonly="h.fromSpec"
+                          />
+                          <div class="kv-divider"></div>
+                          <input type="text" class="kv-input" placeholder="Value" x-model="h.value" />
+                          <template x-if="!h.required">
+                            <button
+                              type="button"
+                              class="kv-remove-btn"
+                              x-on:click="headers.splice(idx, 1)"
+                              aria-label="Remove"
+                            ><IconClose width={12} height={12} /></button>
+                          </template>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: BODY */}
+              {hasRequestBody && (
+                <div x-show="activeTab === 'body'" class="form-field">
               <div class="form-label-row">
                 <span class="form-label">Request Body (JSON)</span>
                 <div class="btn-group-sm">
@@ -1473,7 +1737,219 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
             </div>
           )}
 
-        </div>
+              {/* Optional Custom Overrides (Query / Headers) */}
+              <div x-show="showCustomInputs" class="custom-overrides-card" x-cloak>
+                <div class="custom-overrides-header">
+                  <span class="custom-overrides-title">Optional Custom Overrides</span>
+                  <span class="text-subtle font-sm">Ad-hoc query parameters or headers for manual testing</span>
+                </div>
+
+                <div class="kv-section">
+                  <div class="kv-builder-header">
+                    <span class="form-label">Custom Query Parameters</span>
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-xs"
+                      x-on:click="queryParams.push({ key: '', value: '', enabled: true, fromSpec: false, required: false })"
+                    >
+                      + Add Param
+                    </button>
+                  </div>
+                  <div class="kv-builder-rows">
+                    <template x-if="queryParams.length === 0">
+                      <span class="text-subtle font-sm">No custom query parameters added.</span>
+                    </template>
+                    <template x-for="(q, idx) in queryParams" x-bind:key="idx">
+                      <div class="kv-row">
+                        <input
+                          type="checkbox"
+                          class="kv-checkbox"
+                          x-model="q.enabled"
+                          x-bind:disabled="q.required"
+                        />
+                        <input
+                          type="text"
+                          x-bind:class="q.fromSpec ? 'kv-input kv-input-readonly' : 'kv-input'"
+                          placeholder="Key"
+                          x-model="q.key"
+                          x-bind:readonly="q.fromSpec"
+                        />
+                        <div class="kv-divider"></div>
+                        <input type="text" class="kv-input" placeholder="Value" x-model="q.value" />
+                        <template x-if="!q.required">
+                          <button
+                            type="button"
+                            class="kv-remove-btn"
+                            x-on:click="queryParams.splice(idx, 1)"
+                            aria-label="Remove"
+                          ><IconClose width={12} height={12} /></button>
+                        </template>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+
+                <div class="kv-section">
+                  <div class="kv-builder-header">
+                    <span class="form-label">Custom HTTP Headers</span>
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-xs"
+                      x-on:click="headers.push({ key: '', value: '', enabled: true, fromSpec: false, required: false })"
+                    >
+                      + Add Header
+                    </button>
+                  </div>
+                  <div class="kv-builder-rows">
+                    <template x-if="headers.length === 0">
+                      <span class="text-subtle font-sm">No custom headers added.</span>
+                    </template>
+                    <template x-for="(h, idx) in headers" x-bind:key="idx">
+                      <div class="kv-row">
+                        <input
+                          type="checkbox"
+                          class="kv-checkbox"
+                          x-model="h.enabled"
+                          x-bind:disabled="h.required"
+                        />
+                        <input
+                          type="text"
+                          x-bind:class="h.fromSpec ? 'kv-input kv-input-readonly' : 'kv-input'"
+                          placeholder="Header Name"
+                          x-model="h.key"
+                          x-bind:readonly="h.fromSpec"
+                        />
+                        <div class="kv-divider"></div>
+                        <input type="text" class="kv-input" placeholder="Value" x-model="h.value" />
+                        <template x-if="!h.required">
+                          <button
+                            type="button"
+                            class="kv-remove-btn"
+                            x-on:click="headers.splice(idx, 1)"
+                            aria-label="Remove"
+                          ><IconClose width={12} height={12} /></button>
+                        </template>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div class="no-input-endpoint-card">
+            <div class="no-input-icon-wrap">
+              <IconCheck width={18} height={18} />
+            </div>
+            <div class="no-input-text-wrap">
+              <div class="no-input-title-row">
+                <span class="no-input-title">No Input Required</span>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs text-subtle"
+                  x-on:click="showCustomInputs = !showCustomInputs"
+                >
+                  <span x-text="showCustomInputs ? '− Hide Custom Overrides' : '+ Custom Query / Headers (Optional)'"></span>
+                </button>
+              </div>
+              <p class="no-input-desc">
+                This endpoint does not declare any parameters, request body, headers, or authentication credentials in the OpenAPI specification. All parameters are self-contained in the request URL. Click <strong>Send Request</strong> to execute.
+              </p>
+
+              <div x-show="showCustomInputs" class="custom-overrides-drawer" x-cloak>
+                <div class="kv-section">
+                  <div class="kv-builder-header">
+                    <span class="form-label">Custom Query Parameters</span>
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-xs"
+                      x-on:click="queryParams.push({ key: '', value: '', enabled: true, fromSpec: false, required: false })"
+                    >
+                      + Add Param
+                    </button>
+                  </div>
+                  <div class="kv-builder-rows">
+                    <template x-if="queryParams.length === 0">
+                      <span class="text-subtle font-sm">No custom query parameters added.</span>
+                    </template>
+                    <template x-for="(q, idx) in queryParams" x-bind:key="idx">
+                      <div class="kv-row">
+                        <input
+                          type="checkbox"
+                          class="kv-checkbox"
+                          x-model="q.enabled"
+                          x-bind:disabled="q.required"
+                        />
+                        <input
+                          type="text"
+                          x-bind:class="q.fromSpec ? 'kv-input kv-input-readonly' : 'kv-input'"
+                          placeholder="Key"
+                          x-model="q.key"
+                          x-bind:readonly="q.fromSpec"
+                        />
+                        <div class="kv-divider"></div>
+                        <input type="text" class="kv-input" placeholder="Value" x-model="q.value" />
+                        <template x-if="!q.required">
+                          <button
+                            type="button"
+                            class="kv-remove-btn"
+                            x-on:click="queryParams.splice(idx, 1)"
+                            aria-label="Remove"
+                          ><IconClose width={12} height={12} /></button>
+                        </template>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+
+                <div class="kv-section">
+                  <div class="kv-builder-header">
+                    <span class="form-label">Custom HTTP Headers</span>
+                    <button
+                      type="button"
+                      class="btn btn-secondary btn-xs"
+                      x-on:click="headers.push({ key: '', value: '', enabled: true, fromSpec: false, required: false })"
+                    >
+                      + Add Header
+                    </button>
+                  </div>
+                  <div class="kv-builder-rows">
+                    <template x-if="headers.length === 0">
+                      <span class="text-subtle font-sm">No custom headers added.</span>
+                    </template>
+                    <template x-for="(h, idx) in headers" x-bind:key="idx">
+                      <div class="kv-row">
+                        <input
+                          type="checkbox"
+                          class="kv-checkbox"
+                          x-model="h.enabled"
+                          x-bind:disabled="h.required"
+                        />
+                        <input
+                          type="text"
+                          x-bind:class="h.fromSpec ? 'kv-input kv-input-readonly' : 'kv-input'"
+                          placeholder="Header Name"
+                          x-model="h.key"
+                          x-bind:readonly="h.fromSpec"
+                        />
+                        <div class="kv-divider"></div>
+                        <input type="text" class="kv-input" placeholder="Value" x-model="h.value" />
+                        <template x-if="!h.required">
+                          <button
+                            type="button"
+                            class="kv-remove-btn"
+                            x-on:click="headers.splice(idx, 1)"
+                            aria-label="Remove"
+                          ><IconClose width={12} height={12} /></button>
+                        </template>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </form>
     </div>
   </div>

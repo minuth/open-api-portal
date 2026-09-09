@@ -8,6 +8,7 @@ export interface JoseTypedValueDescriptor {
   type?: JoseValueType
   value?: unknown
   autoNow?: boolean
+  required?: boolean
 }
 
 export interface JoseSignatureConfig {

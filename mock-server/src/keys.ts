@@ -12,6 +12,7 @@ export interface LoadedKeys {
   rsaPsPublicKey: jose.CryptoKey // PS256 signature verification
   rsaOaepPublicKey: jose.CryptoKey // RSA-OAEP-256 encryption
   rsaPrivateKey: jose.CryptoKey // RSA-OAEP-256 decryption
+  rsaSigPrivateKey: jose.CryptoKey // RS256 signature generation
   rsaPublicJwk: jose.JWK
 
   // EC P-256
@@ -43,6 +44,7 @@ export async function loadMockKeys(): Promise<LoadedKeys> {
   const rsaPsPublicKey = (await jose.importSPKI(rsaPublicPem, 'PS256')) as jose.CryptoKey
   const rsaOaepPublicKey = (await jose.importSPKI(rsaPublicPem, 'RSA-OAEP-256')) as jose.CryptoKey
   const rsaPrivateKey = (await jose.importPKCS8(rsaPrivatePem, 'RSA-OAEP-256')) as jose.CryptoKey
+  const rsaSigPrivateKey = (await jose.importPKCS8(rsaPrivatePem, 'RS256')) as jose.CryptoKey
 
   // 2. EC
   const ecPublicPem = fs.readFileSync(path.join(DUMMY_KEYS_DIR, 'ec-public.pem'), 'utf-8')
@@ -68,6 +70,7 @@ export async function loadMockKeys(): Promise<LoadedKeys> {
     rsaPsPublicKey,
     rsaOaepPublicKey,
     rsaPrivateKey,
+    rsaSigPrivateKey,
     rsaPublicJwk,
     ecPublicPem,
     ecPrivatePem,

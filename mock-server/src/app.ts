@@ -4,6 +4,7 @@ import { createJwsRoutes } from './routes/jws-routes'
 import { createJweRoutes } from './routes/jwe-routes'
 import { createNestedRoutes } from './routes/nested-routes'
 import { createPublicRoutes } from './routes/public-routes'
+import { createAuthRoutes } from './routes/auth-routes'
 import { JoseValidationError } from './middleware/jose-validator'
 
 export function createApp(keys: LoadedKeys): Hono {
@@ -43,6 +44,7 @@ export function createApp(keys: LoadedKeys): Hono {
   })
 
   // Mount Route Modules
+  app.route('/', createAuthRoutes(keys))
   app.route('/', createJwsRoutes(keys))
   app.route('/', createJweRoutes(keys))
   app.route('/', createNestedRoutes(keys))

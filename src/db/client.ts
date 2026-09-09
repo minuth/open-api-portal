@@ -11,7 +11,9 @@ if (!fs.existsSync(storageDir)) {
   fs.mkdirSync(storageDir, { recursive: true })
 }
 
-const dbPath = path.join(storageDir, 'portal.db')
+const dbPath = process.env.DATABASE_PATH
+  ? path.resolve(process.cwd(), process.env.DATABASE_PATH)
+  : path.join(storageDir, 'portal.db')
 const sqlite = new Database(dbPath)
 
 // Initialize Drizzle ORM client
