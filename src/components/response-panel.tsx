@@ -373,9 +373,17 @@ export const ResponsePanel = ({
                             )}
                             {joseMeta.payloadClaims && (
                               <tr>
-                                <td class="param-name">JWS Payload Claims</td>
+                                <td class="param-name">{joseMeta.mode === 'jwe' ? 'JWE Payload Claims' : 'JWS Payload Claims'}</td>
                                 <td>
                                   <pre class="meta-code-block">{JSON.stringify(joseMeta.payloadClaims, null, 2)}</pre>
+                                </td>
+                              </tr>
+                            )}
+                            {joseMeta.encClaims && Object.keys(joseMeta.encClaims).length > 0 && (
+                              <tr>
+                                <td class="param-name">JWE Payload Claims</td>
+                                <td>
+                                  <pre class="meta-code-block">{JSON.stringify(joseMeta.encClaims, null, 2)}</pre>
                                 </td>
                               </tr>
                             )}

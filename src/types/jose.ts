@@ -94,6 +94,7 @@ export interface JoseTransformMeta {
   digest?: string
   digestHeaderName?: string
   payloadClaims?: Record<string, unknown>
+  encClaims?: Record<string, unknown>
   x5t?: string
   x5c?: string[]
 }

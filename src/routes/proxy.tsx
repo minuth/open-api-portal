@@ -19,6 +19,84 @@ interface KeyValuePair {
   enabled?: boolean
 }
 
+export function normalizeUrlEncodedBody(rawBody: string): string {
+  const trimmed = rawBody.trim()
+  if (!trimmed) return ''
+
+  // 1. If it's a JSON object string, convert to URLSearchParams
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(trimmed)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const params = new URLSearchParams()
+        for (const [k, v] of Object.entries(parsed)) {
+          if (v !== undefined && v !== null) {
+            params.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v))
+          }
+        }
+        return params.toString()
+      }
+    } catch {
+      // Not valid JSON, continue
+    }
+  }
+
+  // 2. If it contains newlines without ampersands, check if it's key=value or key: value per line
+  if (trimmed.includes('\n') && !trimmed.includes('&')) {
+    const lines = trimmed.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+    const isLineFormat = lines.every((l) => l.includes('=') || l.includes(':'))
+    if (isLineFormat) {
+      const params = new URLSearchParams()
+      for (const line of lines) {
+        const delimiterIndex = line.indexOf('=') !== -1 ? line.indexOf('=') : line.indexOf(':')
+        const k = line.slice(0, delimiterIndex).trim()
+        const v = line.slice(delimiterIndex + 1).trim()
+        if (k) params.append(k, v)
+      }
+      return params.toString()
+    }
+  }
+
+  return trimmed
+}
+
+export function normalizeMultipartBody(rawBody: string, currentContentType: string): { body: string; contentType: string } {
+  const trimmed = rawBody.trim()
+  if (!trimmed) return { body: rawBody, contentType: currentContentType }
+
+  // 1. Check if body already has a boundary
+  const match = trimmed.match(/^--([^\r\n]+)/)
+  if (match) {
+    const existingBoundary = match[1].trim()
+    const contentTypeWithBoundary = currentContentType.includes('boundary=')
+      ? currentContentType
+      : `multipart/form-data; boundary=${existingBoundary}`
+    return { body: rawBody, contentType: contentTypeWithBoundary }
+  }
+
+  // 2. If it is JSON or key-value format, wrap into valid multipart/form-data
+  const generatedBoundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2, 12)
+  const contentTypeWithBoundary = `multipart/form-data; boundary=${generatedBoundary}`
+
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(trimmed)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const parts: string[] = []
+        for (const [k, v] of Object.entries(parsed)) {
+          parts.push(`--${generatedBoundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${typeof v === 'object' ? JSON.stringify(v) : String(v ?? '')}`)
+        }
+        parts.push(`--${generatedBoundary}--\r\n`)
+        return { body: parts.join('\r\n'), contentType: contentTypeWithBoundary }
+      }
+    } catch {
+      // Not JSON
+    }
+  }
+
+  return { body: rawBody, contentType: contentTypeWithBoundary }
+}
+
 function buildActualRequestData(
   method: string,
   targetUrl: string,
@@ -87,6 +165,7 @@ proxyApp.post('/api/proxy', async (c) => {
     let pathTemplate = ((bodyData['pathTemplate'] as string) || '').trim()
     method = ((bodyData['method'] as string) || 'GET').trim()
     const rawBody = (bodyData['body'] as string) || undefined
+    const explicitContentType = ((bodyData['contentType'] as string) || '').trim()
 
     const queryParamsJson = (bodyData['queryParamsJson'] as string) || '[]'
     const headersJson = (bodyData['headersJson'] as string) || '[]'
@@ -177,10 +256,30 @@ proxyApp.post('/api/proxy', async (c) => {
       }
     }
 
+    // Apply explicit Content-Type from playground if not explicitly configured in headers
+    const hasContentTypeHeader = Object.keys(headers).some(
+      (k) => k.toLowerCase() === 'content-type'
+    )
+    if (!hasContentTypeHeader && explicitContentType) {
+      headers['Content-Type'] = explicitContentType
+    }
+
     // 4. In-Memory JOSE Cryptographic Pipeline (Zero Server Persistence)
     let finalBody = rawBody
     let finalHeaders = headers
     let joseMeta: JoseTransformMeta | undefined
+
+    const effectiveContentType = Object.entries(finalHeaders).find(
+      ([k]) => k.toLowerCase() === 'content-type'
+    )?.[1] || explicitContentType || ''
+
+    if (finalBody && effectiveContentType.toLowerCase().includes('application/x-www-form-urlencoded')) {
+      finalBody = normalizeUrlEncodedBody(finalBody)
+    } else if (finalBody && effectiveContentType.toLowerCase().includes('multipart/form-data')) {
+      const normalized = normalizeMultipartBody(finalBody, finalHeaders['Content-Type'] || effectiveContentType)
+      finalBody = normalized.body
+      finalHeaders['Content-Type'] = normalized.contentType
+    }
 
     const joseSecurityJson = (bodyData['joseSecurityJson'] as string) || ''
     const joseHeadersJson = (bodyData['joseHeadersJson'] as string) || ''
@@ -323,11 +422,10 @@ proxyApp.post('/api/proxy', async (c) => {
 
           // Parse and merge custom JWS payload claims
           const activeSignClaims = parseClaimList(joseClaimsJson)
-          if (Object.keys(activeSignClaims).length > 0) {
-            joseConfig.sign.claims = {
-              ...(joseConfig.sign.claims || {}),
-              ...activeSignClaims
-            }
+          joseConfig.sign.claims = {
+            ...(joseConfig.claims || {}),
+            ...(joseConfig.sign.claims || {}),
+            ...activeSignClaims
           }
         }
 

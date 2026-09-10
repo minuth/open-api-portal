@@ -639,15 +639,25 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
     (p) => p.in === 'header' && p.required && p.name.toLowerCase() !== (requiredJoseHeaderName || '').toLowerCase()
   )
 
-  const defaultSampleBody = getDefaultSampleBody(endpoint, spec)
   const isPayloadMethod = ['post', 'put', 'patch'].includes(endpoint.method.toLowerCase())
+  const declaredContentTypes = endpoint.requestBody?.content ? Object.keys(endpoint.requestBody.content) : []
+  const availableContentTypes = declaredContentTypes.length > 0
+    ? declaredContentTypes
+    : (isPayloadMethod ? ['application/json'] : [])
+  const defaultContentType = availableContentTypes[0] || 'application/json'
+
+  const sampleBodiesMap: Record<string, string> = {}
+  for (const ct of availableContentTypes) {
+    sampleBodiesMap[ct] = getSampleBodyForContentType(endpoint, ct, spec)
+  }
+  const defaultSampleBody = sampleBodiesMap[defaultContentType] || ''
 
   const securityInfo = resolveEndpointSecurity(endpoint, spec)
   const primaryScheme = securityInfo.primaryScheme
   const defaultAuthType = primaryScheme ? primaryScheme.type : 'none'
 
   const hasParams = pathParams.length > 0 || defaultQueryParams.length > 0
-  const hasRequestBody = isPayloadMethod && (Boolean(endpoint.requestBody?.content && Object.keys(endpoint.requestBody.content).length > 0) || Boolean(defaultSampleBody && defaultSampleBody.trim() !== ''))
+  const hasRequestBody = isPayloadMethod && (availableContentTypes.length > 0 || Boolean(defaultSampleBody && defaultSampleBody.trim() !== ''))
   const hasDeclaredHeaders = defaultHeaders.length > 0 || explicitRequiredHeaders.length > 0 || Boolean(requiredJoseHeaderName)
   const hasAuth = securityInfo.isSecured
   const hasJose = Boolean(joseConfig)
@@ -723,8 +733,12 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
 
   // JWS payload claims initialization
   const defaultJoseClaims: Array<{ key: string; value: string; type: JoseValueType; autoNow: boolean; enabled: boolean; fromSpec: boolean; required: boolean }> = []
-  if (joseConfig?.sign?.claims) {
-    for (const [k, v] of Object.entries(joseConfig.sign.claims)) {
+  const initialSignClaims: Record<string, unknown> = {
+    ...(joseConfig?.claims || {}),
+    ...(joseConfig?.sign?.claims || {})
+  }
+  if (Object.keys(initialSignClaims).length > 0) {
+    for (const [k, v] of Object.entries(initialSignClaims)) {
       const parsed = parseTypedEntry(k, v)
       defaultJoseClaims.push({
         ...parsed,
@@ -819,6 +833,8 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
     pathParams: Object.fromEntries(pathParams.map((p) => [p.name, String(p.example || '1')])),
     queryParams: defaultQueryParams,
     headers: defaultHeaders,
+    selectedContentType: defaultContentType,
+    sampleBodies: sampleBodiesMap,
     body: defaultSampleBody,
     initialBody: defaultSampleBody,
     joseSignHeaders: defaultJoseSignHeaders,
@@ -983,6 +999,14 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
             };
           }
           return { type: 'none' };
+        },
+
+        changeContentType(newType) {
+          this.selectedContentType = newType;
+          if (this.sampleBodies && this.sampleBodies[newType] !== undefined) {
+            this.body = this.sampleBodies[newType];
+            this.initialBody = this.body;
+          }
         }
       }`}
     >
@@ -1037,6 +1061,7 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
         <input type="hidden" name="queryParamsJson" x-bind:value="JSON.stringify(queryParams.filter(q => q.enabled && q.key.trim()))" />
         <input type="hidden" name="headersJson" x-bind:value="JSON.stringify(headers.filter(h => h.enabled && h.key.trim()))" />
         <input type="hidden" name="authJson" x-bind:value="JSON.stringify(getEffectiveAuth())" />
+        <input type="hidden" name="contentType" x-bind:value="selectedContentType" />
         <input type="hidden" name="body" x-bind:value="body" />
         {joseConfig && (
           <>
@@ -1280,35 +1305,93 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
               {/* TAB 3: BODY */}
               {hasRequestBody && (
                 <div x-show="activeTab === 'body'" class="form-field">
-              <div class="form-label-row">
-                <span class="form-label">Request Body (JSON)</span>
-                <div class="btn-group-sm">
-                  <button
-                    type="button"
-                    class="btn btn-secondary btn-xs"
-                    x-on:click="body = window.formatJsonString ? window.formatJsonString(body) : body"
-                  >
-                    Format JSON
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-secondary btn-xs"
-                    x-on:click="body = initialBody"
-                  >
-                    <IconRefresh width={11} height={11} /> Reset
-                  </button>
-                </div>
-              </div>
+                  <div class="form-label-row">
+                    <div class="form-label-with-type">
+                      <span class="form-label">Request Body</span>
+                      {availableContentTypes.length > 1 && availableContentTypes.length <= 3 ? (
+                        <div class="content-type-pills">
+                          {availableContentTypes.map((ct) => (
+                            <button
+                              type="button"
+                              class="content-type-pill"
+                              title={ct}
+                              x-bind:class={`selectedContentType === '${ct}' ? 'active' : ''`}
+                              x-on:click={`changeContentType('${ct}')`}
+                            >
+                              {formatContentTypeLabel(ct)}
+                            </button>
+                          ))}
+                        </div>
+                      ) : availableContentTypes.length > 3 ? (
+                        <select
+                          class="select content-type-select"
+                          x-model="selectedContentType"
+                          x-on:change="changeContentType($event.target.value)"
+                        >
+                          {availableContentTypes.map((ct) => (
+                            <option value={ct}>{formatContentTypeLabel(ct)}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span class="badge badge-subtle font-mono text-xs" title={defaultContentType}>
+                          {formatContentTypeLabel(defaultContentType)}
+                        </span>
+                      )}
+                    </div>
+                    <div class="btn-group-sm">
+                      <button
+                        type="button"
+                        class="btn btn-secondary btn-xs"
+                        x-show="selectedContentType.toLowerCase().includes('json')"
+                        x-on:click="body = window.formatJsonString ? window.formatJsonString(body) : body"
+                      >
+                        Format JSON
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-secondary btn-xs"
+                        x-show="selectedContentType.toLowerCase().includes('form-urlencoded')"
+                        x-on:click="body = window.formatUrlEncodedString ? window.formatUrlEncodedString(body) : body"
+                      >
+                        Format Form
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-secondary btn-xs"
+                        x-show="selectedContentType.toLowerCase().includes('xml')"
+                        x-on:click="body = window.formatXmlString ? window.formatXmlString(body) : body"
+                      >
+                        Format XML
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-secondary btn-xs"
+                        x-on:click="body = (sampleBodies[selectedContentType] !== undefined ? sampleBodies[selectedContentType] : initialBody)"
+                      >
+                        <IconRefresh width={11} height={11} /> Reset
+                      </button>
+                    </div>
+                  </div>
 
-              <textarea
-                class="textarea request-body-textarea"
-                rows={13}
-                x-model="body"
-                placeholder={'{\n  "key": "value"\n}'}
-                spellcheck={false}
-              ></textarea>
-            </div>
-          )}
+                  <textarea
+                    class="textarea request-body-textarea"
+                    rows={13}
+                    x-model="body"
+                    x-bind:placeholder="
+                      selectedContentType.toLowerCase().includes('form-urlencoded')
+                        ? 'grant_type=client_credentials&client_id=...'
+                        : selectedContentType.toLowerCase().includes('xml')
+                        ? '<root>\n  <key>value</key>\n</root>'
+                        : selectedContentType.toLowerCase().includes('multipart')
+                        ? '------Boundary\nContent-Disposition: form-data; name=&quot;field&quot;\n\nvalue\n------Boundary--'
+                        : selectedContentType.toLowerCase().startsWith('text/')
+                        ? 'Enter plain text content...'
+                        : '{\n  &quot;key&quot;: &quot;value&quot;\n}'
+                    "
+                    spellcheck={false}
+                  ></textarea>
+                </div>
+              )}
 
           {/* TAB 4: JOSE SECURITY (Key Configuration) */}
           {joseConfig && (
@@ -1956,15 +2039,84 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
 )
 }
 
-function getDefaultSampleBody(endpoint: EndpointOperation, spec?: OpenApiDocument): string {
+function formatContentTypeLabel(contentType: string): string {
+  const ct = contentType.toLowerCase().trim()
+  if (ct === 'application/x-www-form-urlencoded') return 'form-urlencoded'
+  if (ct === 'application/json') return 'json'
+  if (ct.includes('json')) return ct.split('/')[1] || 'json'
+  if (ct === 'multipart/form-data' || ct.includes('multipart')) return 'multipart'
+  if (ct === 'application/xml' || ct === 'text/xml' || ct.includes('xml')) return 'xml'
+  if (ct === 'text/plain') return 'text'
+  if (ct === 'text/csv') return 'csv'
+  if (ct === 'text/html') return 'html'
+  if (ct === 'application/octet-stream') return 'binary'
+  if (ct.startsWith('image/')) return ct.replace('image/', '')
+  return ct.includes('/') ? ct.split('/')[1] : ct
+}
+
+function objectToUrlEncoded(obj: unknown): string {
+  if (typeof obj === 'string') return obj
+  if (!obj || typeof obj !== 'object') return String(obj ?? '')
+  const params = new URLSearchParams()
+  for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+    if (v !== undefined && v !== null) {
+      params.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v))
+    }
+  }
+  return params.toString()
+}
+
+function objectToXml(obj: unknown, rootTag = 'root', indent = '  '): string {
+  if (typeof obj === 'string') return obj
+  if (!obj || typeof obj !== 'object') return `<${rootTag}>${String(obj ?? '')}</${rootTag}>`
+  if (Array.isArray(obj)) {
+    return obj.map((item) => objectToXml(item, 'item', indent)).join('\n')
+  }
+  const lines: string[] = [`<${rootTag}>`]
+  for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+    if (v !== undefined && v !== null) {
+      if (typeof v === 'object') {
+        const nested = objectToXml(v, k, indent + '  ')
+        lines.push(`${indent}${nested}`)
+      } else {
+        lines.push(`${indent}<${k}>${String(v)}</${k}>`)
+      }
+    }
+  }
+  lines.push(`</${rootTag}>`)
+  return lines.join('\n')
+}
+
+function objectToMultipartSample(obj: unknown): string {
+  if (typeof obj === 'string') return obj
+  if (!obj || typeof obj !== 'object') return String(obj ?? '')
+  const boundary = '----WebKitFormBoundary7MA4YWxkTrZu0gW'
+  const lines: string[] = []
+  for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+    lines.push(`--${boundary}`)
+    lines.push(`Content-Disposition: form-data; name="${k}"`)
+    lines.push('')
+    lines.push(typeof v === 'object' ? JSON.stringify(v) : String(v ?? ''))
+  }
+  lines.push(`--${boundary}--`)
+  return lines.join('\r\n')
+}
+
+function getSampleBodyForContentType(
+  endpoint: EndpointOperation,
+  contentType: string,
+  spec?: OpenApiDocument
+): string {
   if (!endpoint.requestBody?.content) return ''
 
   const content = endpoint.requestBody.content
-  let mediaObj = content['application/json']
+  let mediaObj = content[contentType]
   if (!mediaObj) {
-    const jsonKey = Object.keys(content).find((k) => k.toLowerCase().includes('json'))
-    if (jsonKey) {
-      mediaObj = content[jsonKey]
+    const matchingKey = Object.keys(content).find((k) =>
+      k.toLowerCase().includes(contentType.toLowerCase())
+    )
+    if (matchingKey) {
+      mediaObj = content[matchingKey]
     } else {
       const firstKey = Object.keys(content)[0]
       if (firstKey) mediaObj = content[firstKey]
@@ -1973,17 +2125,29 @@ function getDefaultSampleBody(endpoint: EndpointOperation, spec?: OpenApiDocumen
 
   if (!mediaObj) return ''
 
+  const ct = contentType.toLowerCase()
+  const isFormUrlEncoded = ct.includes('form-urlencoded')
+  const isXml = ct.includes('xml')
+  const isMultipart = ct.includes('multipart')
+  const isText = ct.startsWith('text/') && !isXml
+
+  const formatSample = (val: unknown): string => {
+    if (typeof val === 'string') return val
+    if (isFormUrlEncoded) return objectToUrlEncoded(val)
+    if (isXml) return objectToXml(val)
+    if (isMultipart) return objectToMultipartSample(val)
+    if (isText) return typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val)
+    return JSON.stringify(val, null, 2)
+  }
+
   if (mediaObj.example !== undefined) {
-    return typeof mediaObj.example === 'string'
-      ? mediaObj.example
-      : JSON.stringify(mediaObj.example, null, 2)
+    return formatSample(mediaObj.example)
   }
 
   if (mediaObj.examples) {
     const firstExKey = Object.keys(mediaObj.examples)[0]
     if (firstExKey && mediaObj.examples[firstExKey]?.value !== undefined) {
-      const exVal = mediaObj.examples[firstExKey].value
-      return typeof exVal === 'string' ? exVal : JSON.stringify(exVal, null, 2)
+      return formatSample(mediaObj.examples[firstExKey].value)
     }
   }
 
@@ -1992,7 +2156,13 @@ function getDefaultSampleBody(endpoint: EndpointOperation, spec?: OpenApiDocumen
   const sample = generateSampleFromSchema(mediaObj.schema, spec, new Set())
   if (sample === undefined) return ''
 
-  return typeof sample === 'string' ? sample : JSON.stringify(sample, null, 2)
+  return formatSample(sample)
+}
+
+function getDefaultSampleBody(endpoint: EndpointOperation, spec?: OpenApiDocument): string {
+  const declaredContentTypes = endpoint.requestBody?.content ? Object.keys(endpoint.requestBody.content) : []
+  const firstType = declaredContentTypes[0] || 'application/json'
+  return getSampleBodyForContentType(endpoint, firstType, spec)
 }
 
 function generateSampleFromSchema(

@@ -147,11 +147,15 @@ export class JoseEngineService implements IJoseEngine {
       let payloadToSign = bodyToProcess
       let jwsClaims: Record<string, unknown> | undefined
 
-      const hasCustomClaims = Boolean(config.sign.claims && Object.keys(config.sign.claims).length > 0)
+      const effectiveSignClaims: Record<string, unknown> = {
+        ...(config.claims || {}),
+        ...(config.sign.claims || {})
+      }
+      const hasCustomClaims = Boolean(Object.keys(effectiveSignClaims).length > 0)
       if (placement === 'header' && (isDigestInPayload || hasCustomClaims)) {
         // JWS in Header: Build JWT claims set containing custom claims and body digest
         jwsClaims = {
-          ...(config.sign.claims || {}),
+          ...effectiveSignClaims,
           ...(isDigestInPayload && computedDigest ? { [digestClaimName]: computedDigest } : {}),
           ...(config.sign.includeIat ? { iat: Math.floor(Date.now() / 1000) } : {}),
           ...(config.sign.includeJti ? { jti: crypto.randomUUID() } : {})
@@ -161,8 +165,8 @@ export class JoseEngineService implements IJoseEngine {
         // JWS in Body: If body is valid JSON, inject claims and/or digest claim directly
         try {
           const bodyObj = JSON.parse(bodyToProcess) as Record<string, unknown>
-          if (config.sign.claims) {
-            Object.assign(bodyObj, config.sign.claims)
+          if (hasCustomClaims) {
+            Object.assign(bodyObj, effectiveSignClaims)
           }
           if (isDigestInPayload && computedDigest) {
             bodyObj[digestClaimName] = computedDigest
@@ -216,10 +220,19 @@ export class JoseEngineService implements IJoseEngine {
         }
 
         const { sensitiveObj, encryptedFieldList } = this.extractFlePayload(rootObj, targetField, config.encrypt.fields)
-        const jweToken = await this.encryptPayload(JSON.stringify(sensitiveObj), config.encrypt, key)
+        const hasEncClaims = Boolean(config.encrypt.claims && Object.keys(config.encrypt.claims).length > 0)
+        const flePayload = hasEncClaims
+          ? { ...config.encrypt.claims, ...sensitiveObj }
+          : sensitiveObj
+        const jweToken = await this.encryptPayload(JSON.stringify(flePayload), config.encrypt, key)
         rootObj[targetField] = jweToken
         updatedBody = JSON.stringify(rootObj, null, 2)
         updatedHeaders['Content-Type'] = 'application/json'
+
+        if (config.computeDigest && updatedBody) {
+          computedDigest = this.computeDigestHeader(updatedBody, effectiveDigestAlg)
+          updatedHeaders[digestHdrName] = computedDigest
+        }
 
         return {
           headers: updatedHeaders,
@@ -235,7 +248,8 @@ export class JoseEngineService implements IJoseEngine {
             encryptedFields: encryptedFieldList,
             flePattern: 'pure',
             digest: computedDigest || updatedHeaders[digestHdrName],
-            digestHeaderName: config.computeDigest ? digestHdrName : undefined
+            digestHeaderName: config.computeDigest ? digestHdrName : undefined,
+            payloadClaims: hasEncClaims ? flePayload : undefined
           }
         }
       }
@@ -311,9 +325,25 @@ export class JoseEngineService implements IJoseEngine {
 
         const { sensitiveObj, encryptedFieldList } = this.extractFlePayload(rootObj, targetField, config.encrypt.fields)
 
-        // Pattern 2: Nested FLE (Sign sensitive data, then encrypt with cty: JWT inside targetField)
+        // Pattern 2: Nested FLE (Sign sensitive data with JWS claims, then encrypt with cty: JWT inside targetField)
         if (config.sign.placement === 'field') {
-          const innerJws = await this.signPayload(JSON.stringify(sensitiveObj), config.sign, signingKeyInput)
+          const effectiveSignClaims: Record<string, unknown> = {
+            ...(config.claims || {}),
+            ...(config.sign.claims || {})
+          }
+          const hasSignClaims = Boolean(Object.keys(effectiveSignClaims).length > 0)
+          const sensitivePayload: Record<string, unknown> = {
+            ...effectiveSignClaims,
+            ...sensitiveObj
+          }
+          if (config.sign.includeIat && (!sensitivePayload.iat || typeof sensitivePayload.iat !== 'number')) {
+            sensitivePayload.iat = Math.floor(Date.now() / 1000)
+          }
+          if (config.sign.includeJti && (!sensitivePayload.jti || typeof sensitivePayload.jti !== 'string')) {
+            sensitivePayload.jti = crypto.randomUUID()
+          }
+
+          const innerJws = await this.signPayload(JSON.stringify(sensitivePayload), config.sign, signingKeyInput)
           const encConfig: JoseEncryptionConfig = {
             ...config.encrypt,
             cty: config.encrypt.cty || 'JWT'
@@ -322,6 +352,11 @@ export class JoseEngineService implements IJoseEngine {
           rootObj[targetField] = jweToken
           updatedBody = JSON.stringify(rootObj, null, 2)
           updatedHeaders['Content-Type'] = 'application/json'
+
+          if (config.computeDigest && updatedBody) {
+            computedDigest = this.computeDigestHeader(updatedBody, effectiveDigestAlg)
+            updatedHeaders[digestHdrName] = computedDigest
+          }
 
           return {
             headers: updatedHeaders,
@@ -339,21 +374,63 @@ export class JoseEngineService implements IJoseEngine {
               cty: 'JWT',
               crit: config.sign.crit,
               digest: computedDigest || updatedHeaders[digestHdrName],
-              digestHeaderName: config.computeDigest ? digestHdrName : undefined
+              digestHeaderName: config.computeDigest ? digestHdrName : undefined,
+              payloadClaims: hasSignClaims || config.sign.includeIat || config.sign.includeJti ? sensitivePayload : undefined,
+              encClaims: config.encrypt.claims
             }
           }
         }
 
         // Pattern 1: Outer Request Signature + FLE
-        // 1. Encrypt sensitive fields into targetField
-        const jweToken = await this.encryptPayload(JSON.stringify(sensitiveObj), config.encrypt, encryptionKeyInput)
+        // 1. Encrypt sensitive fields (plus JWE claims if any) into targetField
+        const hasEncClaims = Boolean(config.encrypt.claims && Object.keys(config.encrypt.claims).length > 0)
+        const fleEncPayload = hasEncClaims
+          ? { ...config.encrypt.claims, ...sensitiveObj }
+          : sensitiveObj
+        const jweToken = await this.encryptPayload(JSON.stringify(fleEncPayload), config.encrypt, encryptionKeyInput)
         rootObj[targetField] = jweToken
         updatedBody = JSON.stringify(rootObj, null, 2)
         updatedHeaders['Content-Type'] = 'application/json'
 
-        // 2. Sign resulting outer JSON body into header
+        // 2. Re-compute digest over the finalized outer body containing encrypted encData
+        const effectiveSignClaims: Record<string, unknown> = {
+          ...(config.claims || {}),
+          ...(config.sign.claims || {})
+        }
+        const hasCustomClaims = Boolean(Object.keys(effectiveSignClaims).length > 0)
+        const isDecoupled = Boolean(isDigestInPayload || hasCustomClaims)
+
+        if ((config.computeDigest || isDecoupled) && updatedBody) {
+          computedDigest = this.computeDigestHeader(updatedBody, effectiveDigestAlg)
+          if (config.computeDigest) {
+            updatedHeaders[digestHdrName] = computedDigest
+          }
+        }
+
+        // 3. Sign: Decoupled Claims Mode vs Legacy Body Signing Mode
+        let payloadToSign = updatedBody
+        let jwsClaims: Record<string, unknown> | undefined
+
+        if (isDecoupled) {
+          // Decoupled Claims Mode: Build JWS payload from effective claims, computed digest, jti, iat, exp
+          jwsClaims = {
+            ...effectiveSignClaims
+          }
+          if (computedDigest) {
+            jwsClaims[digestClaimName] = computedDigest
+          }
+          if (config.sign.includeIat && (!jwsClaims.iat || typeof jwsClaims.iat !== 'number')) {
+            jwsClaims.iat = Math.floor(Date.now() / 1000)
+          }
+          if (config.sign.includeJti && (!jwsClaims.jti || typeof jwsClaims.jti !== 'string')) {
+            jwsClaims.jti = crypto.randomUUID()
+          }
+          payloadToSign = JSON.stringify(jwsClaims)
+        }
+
+        // 4. Sign payload into header
         const headerName = config.sign.headerName || 'X-Signature'
-        const jwsToken = await this.signPayload(updatedBody, config.sign, signingKeyInput)
+        const jwsToken = await this.signPayload(payloadToSign, config.sign, signingKeyInput)
         updatedHeaders[headerName] = jwsToken
 
         return {
@@ -372,13 +449,128 @@ export class JoseEngineService implements IJoseEngine {
             flePattern: 'outer-signature',
             crit: config.sign.crit,
             digest: computedDigest || updatedHeaders[digestHdrName],
-            digestHeaderName: config.computeDigest ? digestHdrName : undefined
+            digestHeaderName: config.computeDigest ? digestHdrName : undefined,
+            payloadClaims: jwsClaims,
+            encClaims: config.encrypt.claims
           }
         }
       }
 
       // Standard Nested (Sign entire body with Client Private Key, then Encrypt with Bank Public Key)
-      const jwsToken = await this.signPayload(bodyToProcess, config.sign, signingKeyInput)
+      const effectiveSignClaims: Record<string, unknown> = {
+        ...(config.claims || {}),
+        ...(config.sign.claims || {})
+      }
+      const hasCustomClaims = Boolean(Object.keys(effectiveSignClaims).length > 0)
+
+      if (config.sign.placement === 'header') {
+        // Architecture: Full Body Encryption (JWE in body) + Request Signature (JWS in Header)
+        // 1. Encrypt body (and any JWE claims) into JWE
+        let bodyToEncrypt = bodyToProcess
+        const hasEncClaims = Boolean(config.encrypt.claims && Object.keys(config.encrypt.claims).length > 0)
+        if (hasEncClaims) {
+          try {
+            const bObj = bodyToProcess ? JSON.parse(bodyToProcess) as Record<string, unknown> : {}
+            bodyToEncrypt = JSON.stringify({ ...bObj, ...config.encrypt.claims }, null, 2)
+          } catch {
+            bodyToEncrypt = JSON.stringify(config.encrypt.claims, null, 2)
+          }
+        }
+        const encConfig: JoseEncryptionConfig = {
+          ...config.encrypt,
+          cty: config.encrypt.cty || (hasEncClaims ? 'JWT' : undefined)
+        }
+        const jweToken = await this.encryptPayload(bodyToEncrypt, encConfig, encryptionKeyInput)
+        updatedBody = jweToken
+        updatedHeaders['Content-Type'] = 'application/jose'
+
+        // 2. Re-compute digest over the finalized encrypted body
+        const isDecoupled = Boolean(isDigestInPayload || hasCustomClaims)
+        if ((config.computeDigest || isDecoupled) && updatedBody) {
+          computedDigest = this.computeDigestHeader(updatedBody, effectiveDigestAlg)
+          if (config.computeDigest) {
+            updatedHeaders[digestHdrName] = computedDigest
+          }
+        }
+
+        // 3. Sign decoupled claims or body into header
+        let payloadToSign = updatedBody
+        let jwsClaims: Record<string, unknown> | undefined
+
+        if (isDecoupled) {
+          jwsClaims = {
+            ...effectiveSignClaims
+          }
+          if (computedDigest) {
+            jwsClaims[digestClaimName] = computedDigest
+          }
+          if (config.sign.includeIat && (!jwsClaims.iat || typeof jwsClaims.iat !== 'number')) {
+            jwsClaims.iat = Math.floor(Date.now() / 1000)
+          }
+          if (config.sign.includeJti && (!jwsClaims.jti || typeof jwsClaims.jti !== 'string')) {
+            jwsClaims.jti = crypto.randomUUID()
+          }
+          payloadToSign = JSON.stringify(jwsClaims)
+        }
+
+        const headerName = config.sign.headerName || 'X-Signature'
+        const jwsToken = await this.signPayload(payloadToSign, config.sign, signingKeyInput)
+        updatedHeaders[headerName] = jwsToken
+
+        return {
+          headers: updatedHeaders,
+          body: updatedBody,
+          meta: {
+            mode: 'both',
+            alg: `${config.sign.alg} + ${config.encrypt.alg}`,
+            enc: config.encrypt.enc,
+            kid: signingKeyInput.kid || encryptionKeyInput.kid,
+            tokenPreview: jwsToken.length > 50 ? `${jwsToken.substring(0, 47)}...` : jwsToken,
+            placement: 'header',
+            headerName,
+            crit: config.sign.crit,
+            digest: computedDigest || updatedHeaders[digestHdrName],
+            digestHeaderName: config.computeDigest ? digestHdrName : undefined,
+            payloadClaims: jwsClaims,
+            encClaims: config.encrypt.claims
+          }
+        }
+      }
+
+      // Architecture: Standard Nested (Sign entire body with Client Private Key, then Encrypt with Bank Public Key)
+      let innerPayloadToSign = bodyToProcess
+      let nestedSignClaims: Record<string, unknown> | undefined
+
+      if (hasCustomClaims) {
+        try {
+          const bodyObj = bodyToProcess ? JSON.parse(bodyToProcess) as Record<string, unknown> : {}
+          Object.assign(bodyObj, effectiveSignClaims)
+          if (config.sign.includeIat && (!bodyObj.iat || typeof bodyObj.iat !== 'number')) {
+            bodyObj.iat = Math.floor(Date.now() / 1000)
+          }
+          if (config.sign.includeJti && (!bodyObj.jti || typeof bodyObj.jti !== 'string')) {
+            bodyObj.jti = crypto.randomUUID()
+          }
+          innerPayloadToSign = JSON.stringify(bodyObj, null, 2)
+          nestedSignClaims = bodyObj
+        } catch {
+          nestedSignClaims = effectiveSignClaims
+        }
+      } else if (config.sign.includeIat || config.sign.includeJti) {
+        try {
+          const bodyObj = bodyToProcess ? JSON.parse(bodyToProcess) as Record<string, unknown> : {}
+          if (config.sign.includeIat && !bodyObj.iat) {
+            bodyObj.iat = Math.floor(Date.now() / 1000)
+          }
+          if (config.sign.includeJti && !bodyObj.jti) {
+            bodyObj.jti = crypto.randomUUID()
+          }
+          innerPayloadToSign = JSON.stringify(bodyObj, null, 2)
+          nestedSignClaims = bodyObj
+        } catch {}
+      }
+
+      const jwsToken = await this.signPayload(innerPayloadToSign, config.sign, signingKeyInput)
       const encConfig: JoseEncryptionConfig = {
         ...config.encrypt,
         cty: config.encrypt.cty || 'JWT'
@@ -387,10 +579,6 @@ export class JoseEngineService implements IJoseEngine {
 
       updatedBody = jweToken
       updatedHeaders['Content-Type'] = 'application/jose'
-
-      if (config.sign.placement === 'header' && config.sign.headerName) {
-        updatedHeaders[config.sign.headerName] = jwsToken
-      }
 
       return {
         headers: updatedHeaders,
@@ -405,7 +593,9 @@ export class JoseEngineService implements IJoseEngine {
           cty: 'JWT',
           crit: config.sign.crit,
           digest: computedDigest || updatedHeaders[digestHdrName],
-          digestHeaderName: config.computeDigest ? digestHdrName : undefined
+          digestHeaderName: config.computeDigest ? digestHdrName : undefined,
+          payloadClaims: nestedSignClaims,
+          encClaims: config.encrypt.claims
         }
       }
     }

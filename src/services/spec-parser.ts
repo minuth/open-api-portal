@@ -516,7 +516,13 @@ export class SpecParserService implements ISpecParser {
         digestInPayload: Boolean(rawSign.digestInPayload || obj.digestInPayload),
         digestClaimName: typeof rawSign.digestClaimName === 'string' ? rawSign.digestClaimName : (typeof obj.digestClaimName === 'string' ? obj.digestClaimName : undefined),
         digestAlgorithm: rawSign.digestAlgorithm === 'SHA-512' || rawSign.digestAlgorithm === 'SHA-384' ? rawSign.digestAlgorithm : (obj.digestAlgorithm === 'SHA-512' || obj.digestAlgorithm === 'SHA-384' ? obj.digestAlgorithm : 'SHA-256'),
-        claims: typeof rawSign.claims === 'object' && rawSign.claims !== null ? (rawSign.claims as Record<string, unknown>) : (typeof obj.claims === 'object' && obj.claims !== null ? (obj.claims as Record<string, unknown>) : undefined)
+        claims: (() => {
+          const merged = {
+            ...(typeof obj.claims === 'object' && obj.claims !== null ? (obj.claims as Record<string, unknown>) : {}),
+            ...(typeof rawSign.claims === 'object' && rawSign.claims !== null ? (rawSign.claims as Record<string, unknown>) : {})
+          }
+          return Object.keys(merged).length > 0 ? merged : undefined
+        })()
       }
     } else if (typeof obj.alg === 'string' && !obj.encrypt) {
       // Shorthand x-jose-security: { alg: "RS256", kid: "..." }
