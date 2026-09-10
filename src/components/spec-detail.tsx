@@ -11,6 +11,7 @@ import {
   SchemaObject
 } from '../types/openapi'
 import { resolveEndpointSecurity } from '../utils/auth-metadata'
+import { MarkdownContent } from './markdown-content'
 
 export interface SpecDetailProps {
   spec: OpenApiDocument
@@ -81,7 +82,7 @@ export const SpecDetail = ({ spec, endpoint }: SpecDetailProps) => {
         )}
 
         {endpoint.description && endpoint.description !== endpoint.summary && (
-          <p class="detail-description">{endpoint.description}</p>
+          <MarkdownContent content={endpoint.description} className="detail-description markdown-content" />
         )}
       </section>
 
@@ -124,7 +125,7 @@ export const SpecDetail = ({ spec, endpoint }: SpecDetailProps) => {
                         <span class="badge-optional">optional</span>
                       )}
                     </td>
-                    <td class="param-type">{param.description || '—'}</td>
+                    <td class="param-type">{param.description ? <MarkdownContent content={param.description} inline /> : '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -143,7 +144,7 @@ export const SpecDetail = ({ spec, endpoint }: SpecDetailProps) => {
             )}
           </h2>
           {endpoint.requestBody.description && (
-            <p class="detail-description">{endpoint.requestBody.description}</p>
+            <MarkdownContent content={endpoint.requestBody.description} className="detail-description markdown-content" />
           )}
           {endpoint.requestBody.content &&
             Object.entries(endpoint.requestBody.content).map(([mediaType, mediaObj]) => (
@@ -173,7 +174,7 @@ export const SpecDetail = ({ spec, endpoint }: SpecDetailProps) => {
                 <div key={res.statusCode} class="response-card">
                   <div class="response-card-header">
                     <span class={statusClass}>{res.statusCode}</span>
-                    <span class="param-name">{res.description}</span>
+                    <span class="param-name">{res.description ? <MarkdownContent content={res.description} inline /> : '—'}</span>
                   </div>
                   {res.content &&
                     Object.entries(res.content).map(([contentType, mediaObj]) => (
@@ -213,7 +214,7 @@ function renderSchemaProperties(schema: SchemaObject, level = 0) {
                   <span class="badge-required">required</span>
                 )}
                 {propSchema.description && (
-                  <span class="param-desc">{propSchema.description}</span>
+                  <span class="param-desc"><MarkdownContent content={propSchema.description} inline /></span>
                 )}
               </div>
               {hasChildren && renderSchemaProperties(propSchema, level + 1)}
