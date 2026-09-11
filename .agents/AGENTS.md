@@ -93,11 +93,19 @@ These guidelines dictate coding conventions, architectural boundaries, and softw
   * **Compact Footprint & Direct Copy**: Keep modals and panels compact (`width: 460px–500px`), avoiding excessive vertical sprawl. Use concise action labels ("Save", "Cancel", "Clear") over verbose phrases ("Save & Authorize", "Clear Credentials").
 * **High-Contrast Dark Theme & Precision Typography**: Adhere strictly to a clean, modern Linear/Vercel design system. Use Geist sans-serif for UI labels and Geist Mono for code, HTTP methods, and tokens.
 * **No Emoji Placeholders for Structural UI**: Never use raw OS emojis (`🔒`, `⚙`, `🗑`) as primary icons or badges in structural UI layouts. Always use clean, scalable SVG components defined in `src/components/icons.tsx` (`<IconLock />`, `<IconPencil />`, `<IconTrash />`).
-* **Visual Hierarchy & Spacing Rigor**:
+* **Visual Hierarchy & Spacing Rigor (Mandatory)**:
+  * **Generous Page Container Boundaries**: Page containers must maintain generous outer padding (minimum 32px top/bottom, 24px horizontal: `padding: var(--sp-8) var(--sp-6) var(--sp-10) var(--sp-6);`) so headers and cards never collide with or hug the top viewport edge.
+  * **Header Directness & Zero Filler Subtitles**: Omit redundant, generic filler paragraphs under self-explanatory section/page titles (e.g. never place "Manage your account credentials, personal access tokens, and portal configuration." under "Settings"). Title and clean tab navigation speak for themselves.
+  * **Form Action Button Spacing**: Action buttons (`Save`, `Cancel`, `Create`, `Update`) must always reside in a dedicated flex container (`.settings-form-actions`) with explicit horizontal gap (`8px`–`12px`) and top breathing room (`margin-top: 12px; padding-top: 8px;`). Never allow action buttons to sit flush against container dividers or card borders.
+  * **Drawer & Collapsible Spacing**: Embedded drawers and collapsible forms must maintain uniform internal padding (`24px` / `var(--sp-6)`). When open, they must have clean visual demarcation from adjacent elements.
+  * **Empty State Dignity**: Never render empty list notifications as raw, unpadded 1-line text pressed against card borders. Always use dedicated empty-state containers (`.settings-empty-state`) with generous vertical padding (`32px`–`40px`), centered alignment, and muted typography. When an "Add" form drawer is actively open, hide the redundant empty state notice beneath it to prevent visual fragmentation.
+  * **Enforce Zero Inline Styles**: Never use inline `style="..."` for text alignment, margins, or padding. Always use utility classes (`.text-right`, `.font-sm`).
   * Enforce clear horizontal spacing (8px–12px) between icons, text labels, and status badges.
   * Apply `min-width: 0`, `flex: 1`, and `text-overflow: ellipsis` on text containers so long labels truncate gracefully without squeezing adjacent tags or action buttons.
-* **Consistent Action Button Heights & Alignment**:
-  * All action buttons within list rows must share identical height (e.g. `28px`), uniform padding, and vertical alignment.
+* **Strictly Identical Button Heights Across Variants & Colors (Mandatory)**:
+  * **Locked Button Heights**: All buttons must have explicit, locked heights and `line-height: 1; box-sizing: border-box;` (`32px` for `.btn`, `28px` for `.btn-sm`, `24px` for `.btn-xs`). Buttons must NEVER rely solely on vertical padding to determine their height.
+  * **White vs. Dark Button Parity**: White primary buttons (`.btn-primary`) and dark/black secondary buttons (`.btn-secondary`) must share the exact same height, font-weight (`500`), 1px border width, and vertical alignment so the white button is never taller or larger than the dark button.
+  * **Internal Label Normalization**: Button text and icons must use `display: inline-flex; align-items: center; line-height: 1;` (wrapped in `<span>`) to eliminate inline line-box variances between raw text nodes and elements.
   * Use subtle ghost/border button styles with smooth CSS hover transitions (`transition: background-color 0.12s, border-color 0.12s`).
 * **Subtle Translucent Badges**:
   * Style status and provider tags (GitHub, GitLab, Local, Sandbox) as compact, mono-spaced pills (`font-size: 0.68rem; padding: 0.15rem 0.5rem`).

@@ -9,7 +9,8 @@ import { IconShield } from '../components/icons'
 export const usersApp = new Hono()
 
 // All user management routes require admin role
-usersApp.use('*', requireRole('admin'))
+usersApp.use('/api/users', requireRole('admin'))
+usersApp.use('/api/users/*', requireRole('admin'))
 
 // List all users HTML table partial
 usersApp.get('/api/users', (c) => {
@@ -48,10 +49,10 @@ usersApp.get('/api/users', (c) => {
 usersApp.post('/api/users/invite', async (c) => {
   try {
     const body = await c.req.parseBody()
-    const username = (body['username'] as string || '').trim()
+    const username = ((body['inviteUsername'] || body['username']) as string || '').trim()
     const email = (body['email'] as string || '').trim()
     const role = (body['role'] as UserRole) || 'viewer'
-    const password = (body['password'] as string || '').trim()
+    const password = ((body['invitePassword'] || body['password']) as string || '').trim()
 
     if (!username || !email || !password) {
       return c.html(

@@ -77,10 +77,13 @@ export function InviteModal({ users = [] }: InviteModalProps) {
                 </label>
                 <input
                   id="invite-username"
-                  name="username"
+                  name="inviteUsername"
                   type="text"
                   class="input"
                   placeholder="e.g. john_doe"
+                  autocomplete="off"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
                   required
                 />
               </div>
@@ -95,6 +98,7 @@ export function InviteModal({ users = [] }: InviteModalProps) {
                   type="email"
                   class="input"
                   placeholder="e.g. john@company.com"
+                  autocomplete="off"
                   required
                 />
               </div>
@@ -124,10 +128,13 @@ export function InviteModal({ users = [] }: InviteModalProps) {
                 </label>
                 <input
                   id="invite-password"
-                  name="password"
+                  name="invitePassword"
                   type="password"
                   class="input"
                   placeholder="Set initial password for user"
+                  autocomplete="new-password"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
                   required
                 />
               </div>
@@ -135,10 +142,10 @@ export function InviteModal({ users = [] }: InviteModalProps) {
 
             <div class="modal-footer">
               <button type="button" class="btn btn-secondary" x-on:click="show = false">
-                Cancel
+                <span>Cancel</span>
               </button>
               <button type="submit" class="btn btn-primary">
-                Create / Invite User
+                <span>Create / Invite User</span>
               </button>
             </div>
           </form>

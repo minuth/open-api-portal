@@ -234,6 +234,9 @@ export function AuthModal({ spec }: AuthModalProps) {
                     class="input"
                     placeholder="Username"
                     x-model="authStore.basicUser"
+                    autocomplete="off"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
                   />
                 </div>
                 <div>
@@ -243,6 +246,9 @@ export function AuthModal({ spec }: AuthModalProps) {
                       class="input"
                       placeholder="Password"
                       x-model="authStore.basicPass"
+                      autocomplete="new-password"
+                      data-lpignore="true"
+                      data-1p-ignore="true"
                     />
                     <button
                       type="button"
@@ -276,7 +282,7 @@ export function AuthModal({ spec }: AuthModalProps) {
             x-show="isSaved"
             x-cloak
           >
-            Clear
+            <span>Clear</span>
           </button>
           <div class="modal-footer-spacer"></div>
           <button
@@ -284,7 +290,7 @@ export function AuthModal({ spec }: AuthModalProps) {
             class="btn btn-secondary btn-sm"
             x-on:click="open = false"
           >
-            Cancel
+            <span>Cancel</span>
           </button>
           <button
             type="button"

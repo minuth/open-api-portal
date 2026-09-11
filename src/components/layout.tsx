@@ -4,7 +4,6 @@ import { OpenApiDocument } from '../types/openapi'
 import { Header } from './header'
 import { UploadModal } from './upload-modal'
 import { TokenModal } from './token-modal'
-import { InviteModal } from './invite-modal'
 import { ErrorDialog } from './error-dialog'
 import { AuthModal } from './auth-modal'
 
@@ -48,7 +47,7 @@ export const Layout = ({
           href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap"
           rel="stylesheet"
         />
-        <link rel="stylesheet" href="/public/css/main.css?v=5" />
+        <link rel="stylesheet" href={`/public/css/main.css?v=${Date.now()}`} />
         <script src="/public/js/htmx.min.js"></script>
         <script src="/public/js/alpine.min.js" defer></script>
       </head>
@@ -74,9 +73,6 @@ export const Layout = ({
 
         {/* Global Token Modal */}
         <TokenModal tokens={tokens} />
-
-        {/* Global Invite User Modal (Admin Only) */}
-        {user?.role === 'admin' && <InviteModal users={allUsers} />}
 
         {/* Global Error Dialog */}
         <ErrorDialog />

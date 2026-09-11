@@ -3,6 +3,15 @@
   document.documentElement.setAttribute('data-theme', t)
 })()
 
+// Allow HTMX to swap 4xx error responses (e.g. 400 Bad Request, 401 Unauthorized, 422 Unprocessable)
+// into target containers so validation and operational error alerts are rendered.
+document.addEventListener('htmx:beforeSwap', function (evt) {
+  if (evt.detail.xhr && evt.detail.xhr.status >= 400 && evt.detail.xhr.status < 500) {
+    evt.detail.shouldSwap = true
+    evt.detail.isError = false
+  }
+})
+
 document.addEventListener('alpine:init', function () {
   Alpine.data('appState', function () {
     return {

@@ -154,7 +154,7 @@ export const UploadModal = ({ tokens = [], user }: UploadModalProps) => {
                 class="btn btn-secondary"
                 x-on:click="openUploadModal = false"
               >
-                Cancel
+                <span>Cancel</span>
               </button>
               <button type="submit" id="local-submit-btn" class="btn btn-primary">
                 <span class="htmx-indicator btn-spinner" aria-hidden="true"></span>
@@ -268,7 +268,7 @@ export const UploadModal = ({ tokens = [], user }: UploadModalProps) => {
                   class="btn btn-secondary"
                   x-on:click="openUploadModal = false"
                 >
-                  Cancel
+                  <span>Cancel</span>
                 </button>
                 <button type="submit" id="scm-submit-btn" class="btn btn-primary">
                   <span class="htmx-indicator btn-spinner" aria-hidden="true"></span>

@@ -10,7 +10,7 @@ import { requireRole } from '../utils/auth-middleware'
 export const scmApp = new Hono()
 
 // SCM import, token configuration, and git sync require admin or editor role
-scmApp.use('*', requireRole('admin', 'editor'))
+scmApp.use('/api/scm/*', requireRole('admin', 'editor'))
 
 
 // 1. Import OpenAPI Spec from GitHub or GitLab SCM

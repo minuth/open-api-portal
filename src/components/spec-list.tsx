@@ -76,7 +76,7 @@ export const SpecList = ({ specs, gitSources = {} }: SpecListProps) => {
                     class="btn btn-secondary btn-sm"
                   >
                     <IconEye />
-                    View Docs
+                    <span>View Docs</span>
                   </a>
 
                   {gitRecord && (
@@ -89,7 +89,7 @@ export const SpecList = ({ specs, gitSources = {} }: SpecListProps) => {
                       title="Fetch latest version from GitHub/GitLab"
                     >
                       <IconRefresh />
-                      Sync Git
+                      <span>Sync Git</span>
                     </button>
                   )}
                 </div>
@@ -103,7 +103,7 @@ export const SpecList = ({ specs, gitSources = {} }: SpecListProps) => {
                   hx-swap="outerHTML"
                 >
                   <IconTrash />
-                  Delete
+                  <span>Delete</span>
                 </button>
               </div>
             </div>

@@ -62,6 +62,11 @@ export const SpecSidebar = ({
         search: '',
         activeId: '${initialActiveId}',
         init() {
+          this.search = '';
+          const searchInput = this.$el.querySelector('#sidebar-endpoint-search');
+          if (searchInput) {
+            searchInput.value = '';
+          }
           const syncFromHash = () => {
             const raw = window.location.hash ? window.location.hash.slice(1) : ''
             if (!raw) return
@@ -106,15 +111,36 @@ export const SpecSidebar = ({
 
       {/* Search */}
       <div class="sidebar-search-box">
-        <div class="search-input-wrapper">
-          <IconSearch />
-          <input
-            type="text"
-            placeholder="Filter endpoints..."
-            class="sidebar-search-input"
-            x-model="search"
-          />
-        </div>
+        <form
+          role="search"
+          action="javascript:void(0);"
+          onsubmit="event.preventDefault(); return false;"
+          autocomplete="off"
+          class="sidebar-search-form"
+        >
+          <div class="search-input-wrapper">
+            <IconSearch />
+            <input
+              type="search"
+              id="sidebar-endpoint-search"
+              name="endpoint_search_query"
+              placeholder="Filter endpoints..."
+              class="sidebar-search-input"
+              x-model="search"
+              readonly={true}
+              x-on:focus="$el.removeAttribute('readonly')"
+              x-on:pointerdown="$el.removeAttribute('readonly')"
+              x-on:blur="if (!$el.value) $el.setAttribute('readonly', 'true')"
+              autocomplete="one-time-code"
+              autocorrect="off"
+              autocapitalize="off"
+              spellcheck={false}
+              data-lpignore="true"
+              data-1p-ignore="true"
+              data-form-type="other"
+            />
+          </div>
+        </form>
       </div>
 
       {/* Endpoints List */}

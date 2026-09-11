@@ -21,7 +21,7 @@ export function LoginPage({ error }: LoginPageProps) {
           href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap"
           rel="stylesheet"
         />
-        <link rel="stylesheet" href="/public/css/main.css" />
+        <link rel="stylesheet" href={`/public/css/main.css?v=${Date.now()}`} />
       </head>
       <body>
         <div class="login-container">
@@ -79,10 +79,6 @@ export function LoginPage({ error }: LoginPageProps) {
                 Sign In
               </button>
             </form>
-
-            <div class="login-footer">
-              Default seed credentials: <code class="code-pill">admin</code> / <code class="code-pill">admin123</code>
-            </div>
           </div>
         </div>
       </body>

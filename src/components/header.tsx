@@ -1,5 +1,5 @@
 import { jsx } from 'hono/jsx'
-import { IconSun, IconMoon, IconList, IconUpload, IconLogo, IconGit, IconUserPlus, IconLogOut, IconShield, IconLock } from './icons'
+import { IconSun, IconMoon, IconList, IconUpload, IconLogo, IconLogOut, IconShield, IconLock, IconSettings } from './icons'
 import { UserRecord } from '../db/schema'
 
 export interface HeaderProps {
@@ -17,9 +17,6 @@ export const Header = ({
   hasActiveSpec,
   hasSecuritySchemes
 }: HeaderProps) => {
-  const isAdmin = user?.role === 'admin'
-  const canConfigToken = user?.role === 'admin' || user?.role === 'editor'
-
   return (
     <header class="header">
       <div class="header-brand">
@@ -65,30 +62,11 @@ export const Header = ({
           <span>Specs Catalog</span>
         </a>
 
-        {/* Invite Users Button (Admin Only) */}
-        {isAdmin && (
-          <button
-            type="button"
-            class="btn btn-secondary btn-sm"
-            x-on:click="$dispatch('open-invite-modal')"
-            title="Invite & manage users"
-          >
-            <IconUserPlus width={14} height={14} />
-            <span>Invite User</span>
-          </button>
-        )}
-
-        {/* PAT Tokens Button (Admin and Editor Only) */}
-        {canConfigToken && (
-          <button
-            type="button"
-            class="btn btn-secondary btn-sm"
-            x-on:click="openTokenModal = true"
-            title="Manage Personal Access Tokens (PAT)"
-          >
-            <IconGit width={14} height={14} />
-            <span>PAT Tokens</span>
-          </button>
+        {user && (
+          <a href="/settings" class="btn btn-secondary btn-sm" title="Settings">
+            <IconSettings width={14} height={14} />
+            <span>Settings</span>
+          </a>
         )}
 
         <button

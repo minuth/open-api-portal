@@ -8,6 +8,7 @@ import { proxyApp } from './routes/proxy'
 import { scmApp } from './routes/scm'
 import { authApp } from './routes/auth'
 import { usersApp } from './routes/users'
+import { settingsApp } from './routes/settings'
 import { initDatabase } from './db/client'
 import { userService } from './services/user-service'
 import { localStorageProvider, memoryStorageProvider, scmService } from './services/storage-instances'
@@ -46,11 +47,14 @@ app.get('/health', (c) => {
 })
 
 // Protect all remaining routes with authentication
+app.use('/settings', requireAuth)
+app.use('/specs', requireAuth)
 app.use('/specs/*', requireAuth)
 app.use('/api/specs/*', requireAuth)
 app.use('/api/upload', requireAuth)
 app.use('/api/proxy', requireAuth)
 app.use('/api/scm/*', requireAuth)
+app.use('/api/users', requireAuth)
 app.use('/api/users/*', requireAuth)
 
 // Mount Protected Controllers
@@ -59,6 +63,7 @@ app.route('/', uploadApp)
 app.route('/', proxyApp)
 app.route('/', scmApp)
 app.route('/', usersApp)
+app.route('/', settingsApp)
 
 // Default Root Route
 app.get('/', requireAuth, async (c) => {

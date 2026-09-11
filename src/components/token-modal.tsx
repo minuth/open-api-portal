@@ -158,6 +158,9 @@ export const TokenModal = ({ tokens = [] }: TokenModalProps) => {
                 x-model="rawToken"
                 placeholder="ghp_xxx (GitHub) or glpat-xxx (GitLab)"
                 x-bind:required="mode === 'add'"
+                autocomplete="new-password"
+                data-lpignore="true"
+                data-1p-ignore="true"
                 class="input"
               />
               <div class="radio-option-sub">
@@ -173,7 +176,7 @@ export const TokenModal = ({ tokens = [] }: TokenModalProps) => {
               class="btn btn-secondary"
               x-on:click="openTokenModal = false; resetForm();"
             >
-              Cancel
+              <span>Cancel</span>
             </button>
             <button type="submit" class="btn btn-primary">
               <span x-show="mode === 'add'">Save Encrypted Token</span>

@@ -652,6 +652,22 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
   }
   const defaultSampleBody = sampleBodiesMap[defaultContentType] || ''
 
+  const isFormSupported = (ct: string): boolean => {
+    if (!ct) return false
+    const l = ct.toLowerCase()
+    return l.includes('json') || l.includes('form-urlencoded') || l.includes('multipart')
+  }
+
+  const defaultBodyFields = extractInitialBodyFields(
+    endpoint,
+    defaultContentType,
+    spec,
+    defaultSampleBody
+  )
+
+  const defaultIsJson = defaultContentType.toLowerCase().includes('json')
+  const initialBodyMode = defaultIsJson ? 'raw' : (isFormSupported(defaultContentType) ? 'form' : 'raw')
+
   const securityInfo = resolveEndpointSecurity(endpoint, spec)
   const primaryScheme = securityInfo.primaryScheme
   const defaultAuthType = primaryScheme ? primaryScheme.type : 'none'
@@ -837,6 +853,8 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
     sampleBodies: sampleBodiesMap,
     body: defaultSampleBody,
     initialBody: defaultSampleBody,
+    bodyMode: initialBodyMode,
+    bodyFields: defaultBodyFields,
     joseSignHeaders: defaultJoseSignHeaders,
     joseEncHeaders: defaultJoseEncHeaders,
     joseHeaders: defaultJoseHeaders,
@@ -1001,11 +1019,137 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
           return { type: 'none' };
         },
 
+        isFormSupported(ct) {
+          if (!ct) return false;
+          const l = (ct || '').toLowerCase();
+          return l.includes('json') || l.includes('form-urlencoded') || l.includes('multipart');
+        },
+
+        syncBodyFromFields() {
+          const ct = (this.selectedContentType || '').toLowerCase();
+          if (ct.includes('json')) {
+            const obj = {};
+            for (const f of this.bodyFields) {
+              if (!f.enabled || !f.key || !f.key.trim()) continue;
+              const k = f.key.trim();
+              let v = f.value;
+              if (f.type === 'number' && v !== '' && !isNaN(Number(v))) {
+                obj[k] = Number(v);
+              } else if (f.type === 'boolean' || v === 'true' || v === 'false') {
+                obj[k] = v === 'true' || v === true;
+              } else if (typeof v === 'string' && ((v.startsWith('{') && v.endsWith('}')) || (v.startsWith('[') && v.endsWith(']')))) {
+                try { obj[k] = JSON.parse(v); } catch (e) { obj[k] = v; }
+              } else {
+                obj[k] = v;
+              }
+            }
+            this.body = JSON.stringify(obj, null, 2);
+          } else if (ct.includes('form-urlencoded')) {
+            const params = new URLSearchParams();
+            for (const f of this.bodyFields) {
+              if (!f.enabled || !f.key || !f.key.trim()) continue;
+              params.append(f.key.trim(), f.value !== undefined && f.value !== null ? f.value : '');
+            }
+            this.body = params.toString();
+          } else if (ct.includes('multipart')) {
+            const lines = [];
+            for (const f of this.bodyFields) {
+              if (!f.enabled || !f.key || !f.key.trim()) continue;
+              lines.push(f.key.trim() + '=' + (f.value !== undefined ? f.value : ''));
+            }
+            this.body = lines.join('\\n');
+          }
+        },
+
+        syncFieldsFromBody() {
+          const ct = (this.selectedContentType || '').toLowerCase();
+          const trimmed = (this.body || '').trim();
+          if (!trimmed) {
+            this.bodyFields = [];
+            return true;
+          }
+          if (ct.includes('json')) {
+            try {
+              const parsed = JSON.parse(trimmed);
+              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                const newFields = [];
+                for (const [k, v] of Object.entries(parsed)) {
+                  const existing = this.bodyFields.find(f => f.key === k);
+                  newFields.push({
+                    key: k,
+                    value: typeof v === 'object' ? JSON.stringify(v) : String(v !== undefined && v !== null ? v : ''),
+                    type: typeof v === 'number' ? 'number' : typeof v === 'boolean' ? 'boolean' : (existing ? existing.type : 'string'),
+                    enabled: true,
+                    required: existing ? existing.required : false,
+                    fromSpec: existing ? existing.fromSpec : false,
+                    description: existing ? existing.description : undefined
+                  });
+                }
+                this.bodyFields = newFields;
+                return true;
+              }
+            } catch (e) {
+              return false;
+            }
+          } else if (ct.includes('form-urlencoded')) {
+            try {
+              const params = new URLSearchParams(trimmed);
+              const newFields = [];
+              params.forEach((v, k) => {
+                const existing = this.bodyFields.find(f => f.key === k);
+                newFields.push({
+                  key: k,
+                  value: v,
+                  type: 'string',
+                  enabled: true,
+                  required: existing ? existing.required : false,
+                  fromSpec: existing ? existing.fromSpec : false
+                });
+              });
+              if (newFields.length > 0) {
+                this.bodyFields = newFields;
+                return true;
+              }
+            } catch (e) {
+              return false;
+            }
+          }
+          return true;
+        },
+
+        switchToFormMode() {
+          const ok = this.syncFieldsFromBody();
+          if (!ok) {
+            alert('Cannot switch to Form view: Body contains invalid JSON. Please correct the syntax first.');
+            return;
+          }
+          this.bodyMode = 'form';
+        },
+
+        switchToRawMode() {
+          this.syncBodyFromFields();
+          this.bodyMode = 'raw';
+        },
+
+        resetBody() {
+          this.body = (this.sampleBodies && this.sampleBodies[this.selectedContentType] !== undefined ? this.sampleBodies[this.selectedContentType] : this.initialBody);
+          this.syncFieldsFromBody();
+        },
+
         changeContentType(newType) {
           this.selectedContentType = newType;
+          const l = (newType || '').toLowerCase();
+          if (!this.isFormSupported(newType) || l.includes('json')) {
+            this.bodyMode = 'raw';
+          } else {
+            this.bodyMode = 'form';
+          }
           if (this.sampleBodies && this.sampleBodies[newType] !== undefined) {
             this.body = this.sampleBodies[newType];
             this.initialBody = this.body;
+            this.syncFieldsFromBody();
+          } else {
+            this.syncBodyFromFields();
           }
         }
       }`}
@@ -1052,6 +1196,7 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
           updateAutoNow(joseEncClaims);
           updateAutoNow(joseSignHeaders);
           updateAutoNow(joseEncHeaders);
+          if (bodyMode === 'form') { syncBodyFromFields(); }
         "
       >
         <input type="hidden" name="pathTemplate" value={endpoint.path} />
@@ -1305,8 +1450,8 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
               {/* TAB 3: BODY */}
               {hasRequestBody && (
                 <div x-show="activeTab === 'body'" class="form-field">
-                  <div class="form-label-row">
-                    <div class="form-label-with-type">
+                  <div class="content-type-selector-bar">
+                    <div class="content-type-label-group">
                       <span class="form-label">Request Body</span>
                       {availableContentTypes.length > 1 && availableContentTypes.length <= 3 ? (
                         <div class="content-type-pills">
@@ -1338,58 +1483,169 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
                         </span>
                       )}
                     </div>
-                    <div class="btn-group-sm">
-                      <button
-                        type="button"
-                        class="btn btn-secondary btn-xs"
-                        x-show="selectedContentType.toLowerCase().includes('json')"
-                        x-on:click="body = window.formatJsonString ? window.formatJsonString(body) : body"
+
+                    <div class="body-toolbar-actions">
+                      {/* Form / Raw Mode Switcher (Visible for structured types) */}
+                      <div
+                        class="body-mode-switcher"
+                        x-show="isFormSupported(selectedContentType)"
                       >
-                        Format JSON
-                      </button>
-                      <button
-                        type="button"
-                        class="btn btn-secondary btn-xs"
-                        x-show="selectedContentType.toLowerCase().includes('form-urlencoded')"
-                        x-on:click="body = window.formatUrlEncodedString ? window.formatUrlEncodedString(body) : body"
+                        <button
+                          type="button"
+                          class="body-mode-tab"
+                          x-bind:class="bodyMode === 'form' ? 'active' : ''"
+                          x-on:click="switchToFormMode()"
+                          title="Key-Value Form UI"
+                        >
+                          Form
+                        </button>
+                        <button
+                          type="button"
+                          class="body-mode-tab"
+                          x-bind:class="bodyMode === 'raw' ? 'active' : ''"
+                          x-on:click="switchToRawMode()"
+                          title="Raw editor"
+                        >
+                          Raw
+                        </button>
+                      </div>
+
+                      {/* Raw Mode Format Buttons */}
+                      <div
+                        class="btn-group-sm"
+                        x-show="bodyMode === 'raw' || !isFormSupported(selectedContentType)"
                       >
-                        Format Form
-                      </button>
-                      <button
-                        type="button"
-                        class="btn btn-secondary btn-xs"
-                        x-show="selectedContentType.toLowerCase().includes('xml')"
-                        x-on:click="body = window.formatXmlString ? window.formatXmlString(body) : body"
+                        <button
+                          type="button"
+                          class="btn btn-secondary btn-xs"
+                          x-show="selectedContentType.toLowerCase().includes('json')"
+                          x-on:click="body = window.formatJsonString ? window.formatJsonString(body) : body"
+                        >
+                          Format JSON
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-secondary btn-xs"
+                          x-show="selectedContentType.toLowerCase().includes('form-urlencoded')"
+                          x-on:click="body = window.formatUrlEncodedString ? window.formatUrlEncodedString(body) : body"
+                        >
+                          Format Form
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-secondary btn-xs"
+                          x-show="selectedContentType.toLowerCase().includes('xml')"
+                          x-on:click="body = window.formatXmlString ? window.formatXmlString(body) : body"
+                        >
+                          Format XML
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-secondary btn-xs"
+                          x-on:click="resetBody()"
+                          title="Reset payload to default sample"
+                        >
+                          <IconRefresh width={11} height={11} /> Reset
+                        </button>
+                      </div>
+
+                      {/* Form Mode Action Buttons */}
+                      <div
+                        class="btn-group-sm"
+                        x-show="bodyMode === 'form' && isFormSupported(selectedContentType)"
                       >
-                        Format XML
-                      </button>
-                      <button
-                        type="button"
-                        class="btn btn-secondary btn-xs"
-                        x-on:click="body = (sampleBodies[selectedContentType] !== undefined ? sampleBodies[selectedContentType] : initialBody)"
-                      >
-                        <IconRefresh width={11} height={11} /> Reset
-                      </button>
+                        <button
+                          type="button"
+                          class="btn btn-secondary btn-xs"
+                          x-on:click="bodyFields.push({ key: '', value: '', enabled: true, fromSpec: false, required: false, type: 'string' }); syncBodyFromFields()"
+                        >
+                          + Add Field
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-secondary btn-xs"
+                          x-on:click="resetBody()"
+                          title="Reset fields to spec defaults"
+                        >
+                          <IconRefresh width={11} height={11} /> Reset
+                        </button>
+                      </div>
                     </div>
                   </div>
 
-                  <textarea
-                    class="textarea request-body-textarea"
-                    rows={13}
-                    x-model="body"
-                    x-bind:placeholder="
-                      selectedContentType.toLowerCase().includes('form-urlencoded')
-                        ? 'grant_type=client_credentials&client_id=...'
-                        : selectedContentType.toLowerCase().includes('xml')
-                        ? '<root>\n  <key>value</key>\n</root>'
-                        : selectedContentType.toLowerCase().includes('multipart')
-                        ? '------Boundary\nContent-Disposition: form-data; name=&quot;field&quot;\n\nvalue\n------Boundary--'
-                        : selectedContentType.toLowerCase().startsWith('text/')
-                        ? 'Enter plain text content...'
-                        : '{\n  &quot;key&quot;: &quot;value&quot;\n}'
-                    "
-                    spellcheck={false}
-                  ></textarea>
+                  {/* Form Mode: Key-Value Field Rows */}
+                  <div
+                    class="kv-section body-kv-section"
+                    x-show="bodyMode === 'form' && isFormSupported(selectedContentType)"
+                  >
+                    <template x-if="bodyFields.length === 0">
+                      <div class="empty-state-muted">
+                        No fields defined. Click <strong>+ Add Field</strong> or switch to <strong>Raw</strong> mode to write JSON directly.
+                      </div>
+                    </template>
+
+                    <div class="kv-builder-rows" x-show="bodyFields.length > 0">
+                      <template x-for="(f, idx) in bodyFields" x-bind:key="idx">
+                        <div class="kv-row">
+                          <input
+                            type="checkbox"
+                            class="kv-checkbox"
+                            x-model="f.enabled"
+                            x-bind:disabled="f.required"
+                            x-on:change="syncBodyFromFields()"
+                            title="Include field in request"
+                          />
+                          <input
+                            type="text"
+                            x-bind:class="f.fromSpec ? 'kv-input kv-input-readonly' : 'kv-input'"
+                            placeholder="Key"
+                            x-model="f.key"
+                            x-bind:readonly="f.fromSpec"
+                            x-on:input="syncBodyFromFields()"
+                          />
+                          <div class="kv-divider"></div>
+                          <input
+                            type="text"
+                            class="kv-input"
+                            placeholder="Value"
+                            x-model="f.value"
+                            x-on:input="syncBodyFromFields()"
+                          />
+                          <template x-if="!f.required">
+                            <button
+                              type="button"
+                              class="kv-remove-btn"
+                              x-on:click="bodyFields.splice(idx, 1); syncBodyFromFields()"
+                              aria-label="Remove"
+                            >
+                              <IconClose width={12} height={12} />
+                            </button>
+                          </template>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+
+                  {/* Raw Mode: Monospace Textarea */}
+                  <div x-show="bodyMode === 'raw' || !isFormSupported(selectedContentType)">
+                    <textarea
+                      class="textarea request-body-textarea"
+                      rows={13}
+                      x-model="body"
+                      x-bind:placeholder="
+                        selectedContentType.toLowerCase().includes('form-urlencoded')
+                          ? 'grant_type=client_credentials&client_id=...'
+                          : selectedContentType.toLowerCase().includes('xml')
+                          ? '<root>\n  <key>value</key>\n</root>'
+                          : selectedContentType.toLowerCase().includes('multipart')
+                          ? '------Boundary\nContent-Disposition: form-data; name=&quot;field&quot;\n\nvalue\n------Boundary--'
+                          : selectedContentType.toLowerCase().startsWith('text/')
+                          ? 'Enter plain text content...'
+                          : '{\n  &quot;key&quot;: &quot;value&quot;\n}'
+                      "
+                      spellcheck={false}
+                    ></textarea>
+                  </div>
                 </div>
               )}
 
@@ -2238,4 +2494,111 @@ function resolveSchemaRef(refStr: string, spec?: OpenApiDocument): SchemaObject 
     }
   }
   return null
+}
+
+function extractInitialBodyFields(
+  endpoint: EndpointOperation,
+  contentType: string,
+  spec?: OpenApiDocument,
+  sampleBody?: string
+): Array<{
+  key: string
+  value: string
+  type: string
+  enabled: boolean
+  required: boolean
+  fromSpec: boolean
+  description?: string
+}> {
+  const fields: Array<{
+    key: string
+    value: string
+    type: string
+    enabled: boolean
+    required: boolean
+    fromSpec: boolean
+    description?: string
+  }> = []
+
+  const mediaObj = endpoint.requestBody?.content?.[contentType]
+  let schema = mediaObj?.schema
+
+  if (schema?.$ref) {
+    schema = resolveSchemaRef(schema.$ref, spec) || schema
+  }
+
+  if (schema?.properties) {
+    const requiredList = schema.required || []
+    for (const [propName, rawProp] of Object.entries(schema.properties)) {
+      let propSchema = rawProp as SchemaObject
+      if (propSchema.$ref) {
+        propSchema = resolveSchemaRef(propSchema.$ref, spec) || propSchema
+      }
+      const isReq = requiredList.includes(propName)
+      let defaultVal = ''
+      if (propSchema.example !== undefined) {
+        defaultVal = typeof propSchema.example === 'object' ? JSON.stringify(propSchema.example) : String(propSchema.example)
+      } else if (propSchema.default !== undefined) {
+        defaultVal = typeof propSchema.default === 'object' ? JSON.stringify(propSchema.default) : String(propSchema.default)
+      } else if (propSchema.enum && propSchema.enum.length > 0) {
+        defaultVal = String(propSchema.enum[0])
+      } else if (propSchema.type === 'integer' || propSchema.type === 'number') {
+        defaultVal = '1'
+      } else if (propSchema.type === 'boolean') {
+        defaultVal = 'true'
+      } else if (propSchema.type === 'array') {
+        defaultVal = '[]'
+      } else if (propSchema.type === 'object') {
+        defaultVal = '{}'
+      }
+
+      fields.push({
+        key: propName,
+        value: defaultVal,
+        type: propSchema.type || (typeof defaultVal === 'number' ? 'number' : typeof defaultVal === 'boolean' ? 'boolean' : 'string'),
+        enabled: true,
+        required: isReq,
+        fromSpec: true,
+        description: propSchema.description
+      })
+    }
+  }
+
+  // Fallback: If no schema properties were found, try parsing the sampleBody
+  if (fields.length === 0 && sampleBody) {
+    const trimmed = sampleBody.trim()
+    if (trimmed.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(trimmed)
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          for (const [k, v] of Object.entries(parsed)) {
+            fields.push({
+              key: k,
+              value: typeof v === 'object' ? JSON.stringify(v) : String(v !== undefined && v !== null ? v : ''),
+              type: typeof v === 'number' ? 'number' : typeof v === 'boolean' ? 'boolean' : 'string',
+              enabled: true,
+              required: false,
+              fromSpec: true
+            })
+          }
+        }
+      } catch {}
+    } else if (contentType.toLowerCase().includes('form-urlencoded')) {
+      try {
+        const params = new URLSearchParams(trimmed)
+        params.forEach((v, k) => {
+          fields.push({
+            key: k,
+            value: v,
+            type: 'string',
+            enabled: true,
+            required: false,
+            fromSpec: true
+          })
+        })
+      } catch {}
+    }
+  }
+
+  return fields
 }

@@ -73,6 +73,34 @@ export class UserService {
     return result.changes > 0
   }
 
+  public updatePassword(userId: string, currentPassword: string, newPassword: string): void {
+    const user = this.findById(userId)
+    if (!user) {
+      throw new StorageError('User not found.')
+    }
+
+    const isCurrentValid = this.verifyPassword(currentPassword, user.passwordHash)
+    if (!isCurrentValid) {
+      throw new StorageError('Current password is incorrect.')
+    }
+
+    if (!newPassword || newPassword.trim().length < 6) {
+      throw new StorageError('New password must be at least 6 characters long.')
+    }
+
+    if (currentPassword === newPassword) {
+      throw new StorageError('New password must be different from current password.')
+    }
+
+    const newHash = this.hashPassword(newPassword.trim())
+    const now = new Date().toISOString()
+
+    db.update(users)
+      .set({ passwordHash: newHash, updatedAt: now })
+      .where(eq(users.id, userId))
+      .run()
+  }
+
   public seedInitialAdmin(): UserRecord | null {
     const allUsers = this.listUsers()
     if (allUsers.length === 0) {
