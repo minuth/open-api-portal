@@ -66,7 +66,13 @@ specsApp.get('/specs', async (c) => {
   const allUsers = getAllUsers(currentUser?.role)
 
   return c.html(
-    <Layout title="All Specifications - Open API Portal" tokens={tokens} user={currentUser} allUsers={allUsers}>
+    <Layout
+      title="All Specifications - Open API Portal"
+      tokens={tokens}
+      user={currentUser}
+      allUsers={allUsers}
+      allSpecs={specs}
+    >
       <div class="portal-container">
         <div class="portal-container-inner">
           <SpecList specs={specs} gitSources={gitSources} />
@@ -109,12 +115,14 @@ specsApp.get('/specs/:id', async (c) => {
   return c.html(
     <Layout
       title={`${spec.title} - Open API Portal`}
+      activeSpecId={spec.id}
       activeSpecTitle={spec.title}
       activeSpecVersion={spec.version}
       tokens={tokens}
       user={currentUser}
       allUsers={allUsers}
       spec={spec}
+      allSpecs={allSpecs}
     >
       <div class="portal-workspace">
         <SpecSidebar

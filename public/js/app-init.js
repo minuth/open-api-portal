@@ -17,6 +17,7 @@ document.addEventListener('alpine:init', function () {
     return {
       openUploadModal: false,
       openTokenModal: false,
+      openShareModal: false,
       openErrorDialog: false,
       errorTitle: '',
       errorMessage: '',

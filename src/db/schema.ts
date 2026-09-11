@@ -1,4 +1,4 @@
-import { sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core'
 
 export const gitTokens = sqliteTable('git_tokens', {
   id: text('id').primaryKey(),
@@ -40,6 +40,20 @@ export const sessions = sqliteTable('sessions', {
   createdAt: text('created_at').notNull()
 })
 
+export const sharedLinks = sqliteTable('shared_links', {
+  id: text('id').primaryKey(),
+  token: text('token').notNull().unique(),
+  specId: text('spec_id').notNull(),
+  specTitle: text('spec_title').notNull(),
+  createdById: text('created_by_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  expiresAt: text('expires_at'),
+  createdAt: text('created_at').notNull(),
+  lastAccessedAt: text('last_accessed_at'),
+  isActive: integer('is_active').notNull().default(1),
+  allowSandboxUpload: integer('allow_sandbox_upload').notNull().default(0),
+  alias: text('alias').unique()
+})
+
 export type UserRole = 'admin' | 'editor' | 'viewer'
 
 export type GitTokenRecord = typeof gitTokens.$inferSelect
@@ -53,4 +67,7 @@ export type NewUserRecord = typeof users.$inferInsert
 
 export type SessionRecord = typeof sessions.$inferSelect
 export type NewSessionRecord = typeof sessions.$inferInsert
+
+export type SharedLinkRecord = typeof sharedLinks.$inferSelect
+export type NewSharedLinkRecord = typeof sharedLinks.$inferInsert
 

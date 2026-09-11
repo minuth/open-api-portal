@@ -1,36 +1,50 @@
 import { jsx } from 'hono/jsx'
 import { GitTokenRecord, UserRecord } from '../db/schema'
-import { OpenApiDocument } from '../types/openapi'
+import { OpenApiDocument, SpecSummary } from '../types/openapi'
 import { Header } from './header'
 import { UploadModal } from './upload-modal'
 import { TokenModal } from './token-modal'
 import { ErrorDialog } from './error-dialog'
 import { AuthModal } from './auth-modal'
+import { ShareModal } from './share-modal'
 
 export interface LayoutProps {
   title?: string
+  activeSpecId?: string
   activeSpecTitle?: string
   activeSpecVersion?: string
   tokens?: GitTokenRecord[]
   user?: UserRecord | null
   allUsers?: UserRecord[]
   spec?: OpenApiDocument
+  allSpecs?: SpecSummary[]
+  isSharedView?: boolean
+  shareExpiresAt?: string | null
+  shareToken?: string
+  allowSandboxUpload?: boolean
   children?: unknown
 }
 
 export const Layout = ({
   title = 'Open API Portal',
+  activeSpecId,
   activeSpecTitle,
   activeSpecVersion,
   tokens = [],
   user,
   allUsers = [],
   spec,
+  allSpecs = [],
+  isSharedView = false,
+  shareExpiresAt,
+  shareToken,
+  allowSandboxUpload = false,
   children
 }: LayoutProps) => {
   const hasSecuritySchemes = Boolean(
     spec?.securitySchemes && Object.keys(spec.securitySchemes).length > 0
   )
+  const canShare = user && (user.role === 'admin' || user.role === 'editor')
 
   return (
     <html lang="en">
@@ -54,13 +68,21 @@ export const Layout = ({
       <body x-data="appState">
         <div class="app-container">
           <Header
+            activeSpecId={activeSpecId || spec?.id}
             activeSpecTitle={activeSpecTitle}
             activeSpecVersion={activeSpecVersion}
             user={user}
             hasActiveSpec={Boolean(spec || activeSpecTitle)}
             hasSecuritySchemes={hasSecuritySchemes}
+            isSharedView={isSharedView}
+            shareExpiresAt={shareExpiresAt}
+            allowSandboxUpload={allowSandboxUpload}
           />
-          <main id="app-main" class="main-content">
+          <main
+            id="app-main"
+            class="main-content"
+            hx-headers={shareToken ? JSON.stringify({ 'x-share-token': shareToken }) : undefined}
+          >
             {children}
           </main>
         </div>
@@ -68,11 +90,29 @@ export const Layout = ({
         {/* Global Spec Auth Modal (Only rendered when specification declares security schemes) */}
         {hasSecuritySchemes && <AuthModal spec={spec} />}
 
+        {/* Global Share Modal (Admin / Editor Only) */}
+        {!isSharedView && canShare && (
+          <ShareModal
+            specs={allSpecs}
+            activeSpecId={activeSpecId || spec?.id}
+            activeSpecTitle={activeSpecTitle || spec?.info.title}
+          />
+        )}
+
         {/* Global Upload Spec Modal */}
-        <UploadModal tokens={tokens} user={user} />
+        {(!isSharedView || allowSandboxUpload) && (
+          <UploadModal
+            tokens={tokens}
+            user={
+              isSharedView && allowSandboxUpload
+                ? ({ id: user?.id || 'ext_viewer', role: 'viewer', username: 'External Viewer' } as UserRecord)
+                : user
+            }
+          />
+        )}
 
         {/* Global Token Modal */}
-        <TokenModal tokens={tokens} />
+        {!isSharedView && <TokenModal tokens={tokens} />}
 
         {/* Global Error Dialog */}
         <ErrorDialog />

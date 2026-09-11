@@ -11,6 +11,7 @@ export interface SpecSidebarProps {
   tags?: TagObject[]
   activeEndpointId?: string
   spec?: OpenApiDocument
+  shareToken?: string
 }
 
 export const SpecSidebar = ({
@@ -19,7 +20,8 @@ export const SpecSidebar = ({
   endpoints,
   tags = [],
   activeEndpointId,
-  spec
+  spec,
+  shareToken
 }: SpecSidebarProps) => {
   // Group endpoints by tag
   const tagGroups = new Map<string, EndpointOperation[]>()
@@ -90,20 +92,43 @@ export const SpecSidebar = ({
       <div class="sidebar-catalog">
         <div class="sidebar-label-row">
           <label class="sidebar-label">Specification</label>
-          <a href="/specs" class="sidebar-manage-link" title="Manage specifications">Manage</a>
+          {!shareToken && (
+            <a href="/specs" class="sidebar-manage-link" title="Manage specifications">Manage</a>
+          )}
         </div>
         {specs.length > 0 ? (
-          <select
-            class="select"
-            x-on:change="window.location.href = '/specs/' + encodeURIComponent($event.target.value)"
-            name="specId"
-          >
-            {specs.map((spec) => (
-              <option key={spec.id} value={spec.id} selected={spec.id === activeSpecId}>
-                {spec.title} ({spec.version}){spec.isTemporary ? ' [Sandbox]' : ''}
-              </option>
-            ))}
-          </select>
+          shareToken ? (
+            specs.length > 1 ? (
+              <select
+                class="select"
+                x-on:change={`window.location.href = '/shared/' + '${shareToken}' + '?specId=' + encodeURIComponent($event.target.value)`}
+                name="specId"
+              >
+                {specs.map((s) => (
+                  <option key={s.id} value={s.id} selected={s.id === activeSpecId}>
+                    {s.title} ({s.version})
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div class="sidebar-active-spec-pill" title={`${specs[0].title} (v${specs[0].version})`}>
+                <span class="sidebar-active-spec-title">{specs[0].title}</span>
+                <span class="badge badge-subtle">v{specs[0].version}</span>
+              </div>
+            )
+          ) : (
+            <select
+              class="select"
+              x-on:change="window.location.href = '/specs/' + encodeURIComponent($event.target.value)"
+              name="specId"
+            >
+              {specs.map((spec) => (
+                <option key={spec.id} value={spec.id} selected={spec.id === activeSpecId}>
+                  {spec.title} ({spec.version}){spec.isTemporary ? ' [Sandbox]' : ''}
+                </option>
+              ))}
+            </select>
+          )
         ) : (
           <div class="sidebar-empty-label">No specifications loaded</div>
         )}
@@ -154,6 +179,10 @@ export const SpecSidebar = ({
                 ? resolveEndpointSecurity(ep, spec).isSecured
                 : Boolean(ep.security && ep.security.length > 0)
 
+              const endpointUrl = shareToken
+                ? `/api/shared/endpoint?token=${encodeURIComponent(shareToken)}&specId=${encodeURIComponent(activeSpecId || '')}&operationId=${encodeURIComponent(ep.id)}`
+                : `/api/specs/endpoint?specId=${encodeURIComponent(activeSpecId || '')}&operationId=${encodeURIComponent(ep.id)}`
+
               return (
                 <button
                   type="button"
@@ -164,7 +193,7 @@ export const SpecSidebar = ({
                   class="sidebar-endpoint-item"
                   x-bind:class={`activeId === '${ep.id}' ? 'active' : ''`}
                   x-on:click={`activeId = '${ep.id}'; if (window.history && window.history.replaceState) { window.history.replaceState(null, '', '#' + encodeURIComponent('${ep.id}')); } else { window.location.hash = '${ep.id}'; }`}
-                  hx-get={`/api/specs/endpoint?specId=${encodeURIComponent(activeSpecId || '')}&operationId=${encodeURIComponent(ep.id)}`}
+                  hx-get={endpointUrl}
                   hx-target="#spec-detail-container"
                   hx-swap="innerHTML"
                   x-show={`search === '' || '${searchHaystack}'.includes(search.toLowerCase())`}

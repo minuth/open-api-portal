@@ -1,11 +1,14 @@
 import { jsx } from 'hono/jsx'
 import { GitTokenRecord, UserRecord } from '../db/schema'
-import { IconSettings, IconKey, IconGit, IconUsers, IconPencil, IconTrash, IconPlus } from './icons'
+import { SharedLinkWithCreator } from '../services/share-service'
+import { SharedLinksTableContent } from '../routes/share'
+import { IconSettings, IconKey, IconGit, IconUsers, IconPencil, IconTrash, IconPlus, IconShare } from './icons'
 
 export interface SettingsPageProps {
   user?: UserRecord | null
   tokens?: GitTokenRecord[]
   users?: UserRecord[]
+  sharedLinks?: SharedLinkWithCreator[]
   initialTab?: string
 }
 
@@ -13,10 +16,12 @@ export function SettingsPage({
   user,
   tokens = [],
   users = [],
+  sharedLinks = [],
   initialTab = 'account'
 }: SettingsPageProps) {
   const isAdmin = user?.role === 'admin'
   const canConfigToken = user?.role === 'admin' || user?.role === 'editor'
+  const canManageShare = user?.role === 'admin' || user?.role === 'editor'
 
   return (
     <div
@@ -79,6 +84,17 @@ export function SettingsPage({
         >
           Security
         </button>
+
+        {canManageShare && (
+          <button
+            type="button"
+            class="settings-tab-btn"
+            x-bind:class="activeTab === 'shared-links' ? 'active' : ''"
+            x-on:click="activeTab = 'shared-links'"
+          >
+            Shared Links
+          </button>
+        )}
 
         {canConfigToken && (
           <button
@@ -216,6 +232,32 @@ export function SettingsPage({
             </div>
           </div>
         </div>
+
+        {/* ─── TAB: Shared Links (Admin & Editor) ─── */}
+        {canManageShare && (
+          <div x-show="activeTab === 'shared-links'" x-cloak class="settings-section">
+            <div class="settings-card">
+              <div class="settings-card-header">
+                <div>
+                  <h2 class="settings-card-title">Public Shared Links</h2>
+                </div>
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-sm"
+                  x-on:click="$dispatch('open-share-modal')"
+                >
+                  <IconPlus width={13} height={13} />
+                  <span>Create Share Link</span>
+                </button>
+              </div>
+
+              {/* Shared Links Table Container (Supports HTMX swaps on revoke/delete) */}
+              <div id="shared-links-tab-content">
+                <SharedLinksTableContent links={sharedLinks} />
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ─── TAB 3: Access Tokens (Admin & Editor) ─── */}
         {canConfigToken && (

@@ -11,6 +11,8 @@ declare module 'hono' {
   }
 }
 
+import { shareService } from '../services/share-service'
+
 export const SESSION_COOKIE_NAME = 'portal_session'
 
 export const authMiddleware: MiddlewareHandler = async (c, next) => {
@@ -23,7 +25,28 @@ export const authMiddleware: MiddlewareHandler = async (c, next) => {
       c.set('user', null)
     }
   } else {
-    c.set('user', null)
+    const shareToken =
+      c.req.query('shareToken') ||
+      c.req.header('x-share-token') ||
+      getCookie(c, 'portal_share_token')
+    if (shareToken) {
+      const link = shareService.validateTokenOrAlias(shareToken)
+      if (link) {
+        c.set('user', {
+          id: `ext_${link.id}`,
+          username: 'External Viewer',
+          email: 'external@viewer.share',
+          passwordHash: '',
+          role: 'viewer',
+          createdAt: link.createdAt,
+          updatedAt: link.createdAt
+        })
+      } else {
+        c.set('user', null)
+      }
+    } else {
+      c.set('user', null)
+    }
   }
   await next()
 }

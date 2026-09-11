@@ -611,4 +611,60 @@ export const IconCopy = ({ width = 14, height = 14, class: className = 'btn-icon
   </svg>
 )
 
+export const IconShare = ({ width = 14, height = 14, class: className = 'btn-icon', ...rest }: IconProps) => (
+  <svg
+    width={width}
+    height={height}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    class={className}
+    {...rest}
+  >
+    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+    <polyline points="16 6 12 2 8 6"></polyline>
+    <line x1="12" y1="2" x2="12" y2="15"></line>
+  </svg>
+)
+
+export const IconLink = ({ width = 14, height = 14, class: className = 'btn-icon', ...rest }: IconProps) => (
+  <svg
+    width={width}
+    height={height}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    class={className}
+    {...rest}
+  >
+    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+  </svg>
+)
+
+export const IconChevronDown = ({ width = 14, height = 14, class: className = 'btn-icon', ...rest }: IconProps) => (
+  <svg
+    width={width}
+    height={height}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    class={className}
+    {...rest}
+  >
+    <polyline points="6 9 12 15 18 9"></polyline>
+  </svg>
+)
+
+
+
 

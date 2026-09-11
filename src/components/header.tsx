@@ -1,26 +1,36 @@
 import { jsx } from 'hono/jsx'
-import { IconSun, IconMoon, IconList, IconUpload, IconLogo, IconLogOut, IconShield, IconLock, IconSettings } from './icons'
+import { IconSun, IconMoon, IconList, IconUpload, IconLogo, IconLogOut, IconShield, IconLock, IconSettings, IconShare } from './icons'
 import { UserRecord } from '../db/schema'
 
 export interface HeaderProps {
+  activeSpecId?: string
   activeSpecTitle?: string
   activeSpecVersion?: string
   user?: UserRecord | null
   hasActiveSpec?: boolean
   hasSecuritySchemes?: boolean
+  isSharedView?: boolean
+  shareExpiresAt?: string | null
+  allowSandboxUpload?: boolean
 }
 
 export const Header = ({
+  activeSpecId,
   activeSpecTitle,
   activeSpecVersion,
   user,
   hasActiveSpec,
-  hasSecuritySchemes
+  hasSecuritySchemes,
+  isSharedView,
+  shareExpiresAt,
+  allowSandboxUpload
 }: HeaderProps) => {
+  const canShare = user && (user.role === 'admin' || user.role === 'editor')
+
   return (
     <header class="header">
       <div class="header-brand">
-        <a href="/" class="header-logo">
+        <a href={isSharedView ? '#' : '/'} class="header-logo">
           <IconLogo width={20} height={20} />
           <span>Open API Portal</span>
         </a>
@@ -31,6 +41,20 @@ export const Header = ({
           </span>
         ) : (
           <span class="header-badge">Centralized API Management</span>
+        )}
+
+        {isSharedView && (
+          <span
+            class="badge badge-warning"
+            title={
+              shareExpiresAt
+                ? `This public link expires on ${new Date(shareExpiresAt).toLocaleString()}`
+                : 'Permanent public link (Never expires)'
+            }
+          >
+            <IconLock width={11} height={11} />
+            <span>Shared View &bull; {shareExpiresAt ? `Expires ${new Date(shareExpiresAt).toLocaleDateString()}` : 'Never expires'}</span>
+          </span>
         )}
       </div>
 
@@ -57,28 +81,55 @@ export const Header = ({
           </button>
         )}
 
-        <a href="/specs" class="btn btn-secondary btn-sm">
-          <IconList width={14} height={14} />
-          <span>Specs Catalog</span>
-        </a>
+        {/* Quick Share Link Trigger (Admin / Editor Only) */}
+        {!isSharedView && hasActiveSpec && canShare && (
+          <button
+            type="button"
+            class="btn btn-secondary btn-sm"
+            x-on:click={`$dispatch('open-share-modal', { specId: '${activeSpecId || ''}', specTitle: '${activeSpecTitle || ''}' })`}
+            title="Create public share link"
+          >
+            <IconShare width={14} height={14} />
+            <span>Share</span>
+          </button>
+        )}
 
-        {user && (
+        {!isSharedView && (
+          <a href="/specs" class="btn btn-secondary btn-sm">
+            <IconList width={14} height={14} />
+            <span>Specs Catalog</span>
+          </a>
+        )}
+
+        {!isSharedView && user && (
           <a href="/settings" class="btn btn-secondary btn-sm" title="Settings">
             <IconSettings width={14} height={14} />
             <span>Settings</span>
           </a>
         )}
 
-        <button
-          type="button"
-          class="btn btn-primary btn-sm"
-          x-on:click="openUploadModal = true"
-        >
-          <IconUpload width={14} height={14} />
-          <span>{user?.role === 'viewer' ? 'Upload Sandbox Spec' : 'Upload Spec'}</span>
-        </button>
+        {!isSharedView ? (
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            x-on:click="openUploadModal = true"
+          >
+            <IconUpload width={14} height={14} />
+            <span>{user?.role === 'viewer' ? 'Upload Sandbox Spec' : 'Upload Spec'}</span>
+          </button>
+        ) : allowSandboxUpload ? (
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            x-on:click="openUploadModal = true"
+            title="Upload private Sandbox specification"
+          >
+            <IconUpload width={14} height={14} />
+            <span>Upload Sandbox Spec</span>
+          </button>
+        ) : null}
 
-        {user && (
+        {!isSharedView && user && (
           <div class="user-avatar-pill">
             <span class="user-avatar-name">{user.username}</span>
             <span class={`role-badge role-badge-${user.role}`}>

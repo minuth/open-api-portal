@@ -2,7 +2,7 @@ import { jsx } from 'hono/jsx'
 import { SpecSummary } from '../types/openapi'
 import { GitSourceRecord } from '../db/schema'
 import { EmptyState } from './empty-state'
-import { IconEndpoints, IconCalendar, IconEye, IconRefresh, IconTrash } from './icons'
+import { IconEndpoints, IconCalendar, IconEye, IconRefresh, IconTrash, IconShare } from './icons'
 
 export interface SpecListProps {
   specs: SpecSummary[]
@@ -78,6 +78,16 @@ export const SpecList = ({ specs, gitSources = {} }: SpecListProps) => {
                     <IconEye />
                     <span>View Docs</span>
                   </a>
+
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm"
+                    x-on:click={`$dispatch('open-share-modal', { specId: '${spec.id}', specTitle: '${spec.title.replace(/'/g, "\\'")}' })`}
+                    title="Create public share link"
+                  >
+                    <IconShare width={13} height={13} />
+                    <span>Share</span>
+                  </button>
 
                   {gitRecord && (
                     <button

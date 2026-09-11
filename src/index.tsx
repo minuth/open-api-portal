@@ -9,6 +9,7 @@ import { scmApp } from './routes/scm'
 import { authApp } from './routes/auth'
 import { usersApp } from './routes/users'
 import { settingsApp } from './routes/settings'
+import { shareApp } from './routes/share'
 import { initDatabase } from './db/client'
 import { userService } from './services/user-service'
 import { localStorageProvider, memoryStorageProvider, scmService } from './services/storage-instances'
@@ -56,6 +57,7 @@ app.use('/api/proxy', requireAuth)
 app.use('/api/scm/*', requireAuth)
 app.use('/api/users', requireAuth)
 app.use('/api/users/*', requireAuth)
+app.use('/api/share/*', requireAuth)
 
 // Mount Protected Controllers
 app.route('/', specsApp)
@@ -64,6 +66,7 @@ app.route('/', proxyApp)
 app.route('/', scmApp)
 app.route('/', usersApp)
 app.route('/', settingsApp)
+app.route('/', shareApp)
 
 // Default Root Route
 app.get('/', requireAuth, async (c) => {
@@ -93,7 +96,13 @@ app.get('/', requireAuth, async (c) => {
   }
 
   return c.html(
-    <Layout title="Open API Portal" tokens={tokens} user={currentUser} allUsers={allUsers}>
+    <Layout
+      title="Open API Portal"
+      tokens={tokens}
+      user={currentUser}
+      allUsers={allUsers}
+      allSpecs={allSpecs}
+    >
       <EmptyState />
     </Layout>
   )

@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { jsx } from 'hono/jsx'
 import { localStorageProvider, memoryStorageProvider } from '../services/storage-instances'
+import { shareService } from '../services/share-service'
 import { AlertBox } from '../components/alert-box'
 import { InvalidSpecError, StorageError } from '../types/errors'
 import { logServerError } from '../utils/logger'
@@ -14,8 +15,22 @@ uploadApp.post('/api/upload', async (c) => {
     const specFile = body['specFile']
     let mode = (body['mode'] as string) || 'save'
 
-    // Viewer role is strictly restricted to Sandbox (view-only) mode
-    if (user?.role === 'viewer') {
+    // External viewers accessing via public share link
+    if (user?.id?.startsWith('ext_')) {
+      const linkId = user.id.replace('ext_', '')
+      const link = shareService.getSharedLinkById(linkId)
+      if (!link || link.allowSandboxUpload !== 1) {
+        return c.html(
+          <AlertBox
+            title="Access Denied"
+            message="Uploading sandbox specifications is not allowed for this share link."
+          />,
+          403
+        )
+      }
+      mode = 'view'
+    } else if (user?.role === 'viewer') {
+      // Viewer role is strictly restricted to Sandbox (view-only) mode
       if (mode === 'save') {
         return c.html(
           <AlertBox
@@ -74,6 +89,14 @@ uploadApp.post('/api/upload', async (c) => {
       doc = await memoryStorageProvider.saveSpec(filename, yamlContent, user?.id)
     } else {
       doc = await localStorageProvider.saveSpec(filename, yamlContent)
+    }
+
+    if (user?.id?.startsWith('ext_')) {
+      const linkId = user.id.replace('ext_', '')
+      const link = shareService.getSharedLinkById(linkId)
+      const shareSlug = link?.alias || link?.token || linkId
+      c.header('HX-Redirect', `/shared/${shareSlug}?specId=${encodeURIComponent(doc.id)}`)
+      return c.text('Upload Successful')
     }
 
     c.header('HX-Redirect', `/specs/${encodeURIComponent(doc.id)}`)
