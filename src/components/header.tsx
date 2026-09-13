@@ -1,5 +1,5 @@
 import { jsx } from 'hono/jsx'
-import { IconSun, IconMoon, IconList, IconUpload, IconLogo, IconLogOut, IconShield, IconLock, IconSettings, IconShare } from './icons'
+import { IconSun, IconMoon, IconList, IconUpload, IconLogo, IconLogOut, IconShield, IconLock, IconSettings, IconShare, IconGitHub } from './icons'
 import { UserRecord } from '../db/schema'
 
 export interface HeaderProps {
@@ -68,6 +68,17 @@ export const Header = ({
           <IconSun x-show="theme === 'dark'" />
           <IconMoon x-show="theme === 'light'" x-cloak />
         </button>
+
+        <a
+          href="https://github.com/minuth/open-api-portal"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="btn btn-secondary btn-icon-only btn-sm"
+          title="GitHub Repository"
+          aria-label="GitHub Repository"
+        >
+          <IconGitHub width={14} height={14} />
+        </a>
 
         {hasActiveSpec && hasSecuritySchemes && (
           <button

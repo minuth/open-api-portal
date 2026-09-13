@@ -1,5 +1,5 @@
 import { jsx } from 'hono/jsx'
-import { IconLogo, IconLock, IconUser } from './icons'
+import { IconLogo, IconLock, IconUser, IconGitHub } from './icons'
 
 export interface LoginPageProps {
   error?: string
@@ -79,6 +79,19 @@ export function LoginPage({ error }: LoginPageProps) {
                 Sign In
               </button>
             </form>
+
+            <div class="login-footer">
+              <a
+                href="https://github.com/minuth/open-api-portal"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="login-github-link"
+                title="View Open API Portal repository on GitHub"
+              >
+                <IconGitHub width={14} height={14} />
+                <span>GitHub Repository</span>
+              </a>
+            </div>
           </div>
         </div>
       </body>

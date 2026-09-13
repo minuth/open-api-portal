@@ -2052,6 +2052,31 @@ body {
   border-color: rgba(245, 158, 11, 0.22);
 }
 
+.badge-github {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.badge-gitlab {
+  background-color: rgba(252, 109, 38, 0.12);
+  color: #fc6d26;
+  border-color: rgba(252, 109, 38, 0.22);
+}
+
+.git-repo-badge-link {
+  text-decoration: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: opacity 0.12s ease;
+}
+
+.git-repo-badge-link:hover {
+  opacity: 0.85;
+}
+
 .spec-card-description {
   font-size: 0.82rem;
   color: var(--text-muted);
@@ -2326,6 +2351,21 @@ body {
   font-size: 0.78rem;
   color: var(--text-subtle);
   text-align: center;
+}
+
+.login-github-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: color 0.12s ease;
+}
+
+.login-github-link:hover {
+  color: var(--text-main);
 }
 
 .code-pill {

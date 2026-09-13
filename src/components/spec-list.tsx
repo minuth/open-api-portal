@@ -42,9 +42,15 @@ export const SpecList = ({ specs, gitSources = {} }: SpecListProps) => {
                   <span class="spec-version-badge">v{spec.version}</span>
                 </div>
                 {gitRecord ? (
-                  <span class={`badge badge-${gitRecord.provider}`} title={`Linked to ${gitRecord.provider}: ${gitRecord.repoUrl} @ ${gitRecord.branch}`}>
+                  <a
+                    href={gitRecord.repoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class={`badge badge-${gitRecord.provider} git-repo-badge-link`}
+                    title={`Open repository on ${gitRecord.provider === 'github' ? 'GitHub' : 'GitLab'}: ${gitRecord.repoUrl} @ ${gitRecord.branch}`}
+                  >
                     {gitRecord.provider === 'github' ? 'GitHub' : 'GitLab'}
-                  </span>
+                  </a>
                 ) : spec.isTemporary ? (
                   <span class="badge badge-sandbox" title="Stored in temporary sandbox memory">Sandbox</span>
                 ) : (
