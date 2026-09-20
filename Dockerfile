@@ -1,17 +1,22 @@
-FROM node:20-slim
+FROM node:22-bookworm-slim
 
 WORKDIR /app
 
-# Install build dependencies required for native C++ addons (better-sqlite3)
+# Install build tools and SQLite development headers
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     make \
     g++ \
+    sqlite3 \
+    libsqlite3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install project dependencies
 COPY package.json package-lock.json ./
 RUN npm ci
+
+# Force rebuild of better-sqlite3 from source to prevent ABI mismatch and SIGSEGV 139
+RUN npm rebuild better-sqlite3 --build-from-source
 
 # Copy source code and assets
 COPY . .
