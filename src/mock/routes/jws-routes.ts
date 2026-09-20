@@ -7,7 +7,7 @@ import {
   verifyDigestHeader,
   verifyPayloadDigest,
   JoseValidationError
-} from '../middleware/jose-validator'
+} from '../jose-validator'
 
 export function createJwsRoutes(keys: LoadedKeys): Hono {
   const router = new Hono()

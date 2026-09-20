@@ -28,6 +28,8 @@ export interface JoseSignatureConfig {
   digestClaimName?: string // Claim key name for the digest (default: 'digest')
   digestAlgorithm?: 'SHA-256' | 'SHA-384' | 'SHA-512' // Algorithm for payload digest
   claims?: Record<string, unknown> // Additional custom JWT payload claims (e.g. iss, aud, sub, scope)
+  defaultKey?: string // Default private/secret key text (PEM, JWK, or secret) from specification
+  defaultPassphrase?: string // Optional default passphrase for encrypted private keys
 }
 
 export interface JoseEncryptionConfig {
@@ -45,6 +47,7 @@ export interface JoseEncryptionConfig {
   customHeaders?: Record<string, unknown>
   crit?: string[]
   claims?: Record<string, unknown> // Custom payload claims for Encrypted JWT (RFC 7519)
+  defaultKey?: string // Default recipient public/secret key text (PEM, JWK, or secret) from specification
 }
 
 export interface JoseSecurityExtension {
@@ -61,6 +64,9 @@ export interface JoseSecurityExtension {
   jwksUri?: string // Remote JWKS discovery endpoint for public keys
   verifyResponse?: boolean // Verifies incoming JWS responses
   decryptResponse?: boolean // Decrypts incoming JWE responses
+  defaultKey?: string // Top-level default key text from specification
+  defaultSigningKey?: string // Top-level default signing key text from specification
+  defaultEncryptionKey?: string // Top-level default encryption key text from specification
 }
 
 export interface EphemeralKeyInput {

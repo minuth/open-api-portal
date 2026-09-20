@@ -1,3 +1,4 @@
+import './env'
 import { Hono } from 'hono'
 import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
@@ -19,6 +20,8 @@ import { AlertBox } from './components/alert-box'
 import { GitTokenRecord, UserRecord } from './db/schema'
 import { loggerMiddleware, logServerError } from './utils/logger'
 import { authMiddleware, requireAuth } from './utils/auth-middleware'
+import { loadMockKeys } from './mock/keys'
+import { createMockApp, syncMockSpecs } from './mock/mock-app'
 
 // Initialize database schema & migrations
 initDatabase()
@@ -109,6 +112,21 @@ app.get('/', requireAuth, async (c) => {
 })
 
 const port = Number(process.env.PORT) || 3000
+
+// Optional Mock Server Integration (Unified single port)
+const mockApiEnv = (process.env.ENABLE_MOCK_API || process.env.MOCK_API_ENABLED || '').trim().toLowerCase()
+const enableMockApi = mockApiEnv === 'true' || mockApiEnv === '1' || mockApiEnv === 'yes'
+
+if (enableMockApi) {
+  await syncMockSpecs()
+  const mockKeys = await loadMockKeys()
+  const mockApp = createMockApp(mockKeys)
+  app.route('/', mockApp)
+  console.log(`[Mock Server] Enabled and mounted on unified port ${port}`)
+} else {
+  console.log(`[Mock Server] Disabled (set ENABLE_MOCK_API=true to enable)`)
+}
+
 console.log(`Open API Portal server running on http://localhost:${port}`)
 
 serve({

@@ -7,7 +7,7 @@ import {
   verifyNestedSignThenEncrypt,
   decryptFlePayload,
   JoseValidationError
-} from '../middleware/jose-validator'
+} from '../jose-validator'
 
 export function createNestedRoutes(keys: LoadedKeys): Hono {
   const router = new Hono()

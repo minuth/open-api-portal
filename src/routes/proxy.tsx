@@ -287,18 +287,36 @@ proxyApp.post('/api/proxy', async (c) => {
     const joseEncHeadersJson = (bodyData['joseEncHeadersJson'] as string) || ''
     const joseClaimsJson = (bodyData['joseClaimsJson'] as string) || ''
     const joseEncClaimsJson = (bodyData['joseEncClaimsJson'] as string) || ''
-    const joseKeyContent = (bodyData['joseKeyContent'] as string) || ''
-    const joseKid = (bodyData['joseKid'] as string) || ''
-    const josePassphrase = (bodyData['josePassphrase'] as string) || undefined
+    let parsedJoseConfig: JoseSecurityExtension | null = null
+    if (joseSecurityJson && joseSecurityJson.trim()) {
+      try {
+        parsedJoseConfig = JSON.parse(joseSecurityJson) as JoseSecurityExtension
+      } catch {
+        parsedJoseConfig = null
+      }
+    }
+
+    const defaultSignKey = parsedJoseConfig?.sign?.defaultKey || parsedJoseConfig?.defaultSigningKey || parsedJoseConfig?.defaultKey || ''
+    const defaultEncKey = parsedJoseConfig?.encrypt?.defaultKey || parsedJoseConfig?.defaultEncryptionKey || (parsedJoseConfig?.mode === 'jwe' ? parsedJoseConfig?.defaultKey : '') || ''
+    const defaultSingleKey = (parsedJoseConfig?.mode === 'jws' ? defaultSignKey : defaultEncKey) || parsedJoseConfig?.defaultKey || ''
+    const defaultPassphrase = parsedJoseConfig?.sign?.defaultPassphrase
+
+    const submittedKeyContent = ((bodyData['joseKeyContent'] as string) || '').trim()
+    const joseKeyContent = submittedKeyContent || defaultSingleKey
+    const joseKid = ((bodyData['joseKid'] as string) || '').trim() || parsedJoseConfig?.sign?.kid || parsedJoseConfig?.encrypt?.kid || ''
+    const josePassphrase = (bodyData['josePassphrase'] as string) || defaultPassphrase
 
     // Dual-key inputs
-    const joseSigningKeyContent = (bodyData['joseSigningKeyContent'] as string) || ''
-    const joseSigningKid = (bodyData['joseSigningKid'] as string) || ''
-    const joseSigningPassphrase = (bodyData['joseSigningPassphrase'] as string) || undefined
-    const joseEncryptionKeyContent = (bodyData['joseEncryptionKeyContent'] as string) || ''
-    const joseEncryptionKid = (bodyData['joseEncryptionKid'] as string) || ''
+    const submittedSigningKey = ((bodyData['joseSigningKeyContent'] as string) || '').trim()
+    const joseSigningKeyContent = submittedSigningKey || defaultSignKey
+    const joseSigningKid = ((bodyData['joseSigningKid'] as string) || '').trim() || parsedJoseConfig?.sign?.kid || ''
+    const joseSigningPassphrase = (bodyData['joseSigningPassphrase'] as string) || defaultPassphrase
 
-    const hasAnyKey = joseKeyContent.trim() || joseSigningKeyContent.trim() || joseEncryptionKeyContent.trim()
+    const submittedEncryptionKey = ((bodyData['joseEncryptionKeyContent'] as string) || '').trim()
+    const joseEncryptionKeyContent = submittedEncryptionKey || defaultEncKey
+    const joseEncryptionKid = ((bodyData['joseEncryptionKid'] as string) || '').trim() || parsedJoseConfig?.encrypt?.kid || ''
+
+    const hasAnyKey = Boolean(joseKeyContent.trim() || joseSigningKeyContent.trim() || joseEncryptionKeyContent.trim())
 
     if (joseSecurityJson && hasAnyKey) {
       try {

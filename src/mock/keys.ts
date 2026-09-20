@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import * as jose from 'jose'
 
-const DUMMY_KEYS_DIR = path.resolve(process.cwd(), '../dummy-keys')
+const DUMMY_KEYS_DIR = path.resolve(process.cwd(), 'dummy-keys')
 
 export interface LoadedKeys {
   // RSA 2048

@@ -1,0 +1,299 @@
+openapi: 3.0.3
+info:
+  title: Cortex AI & Large Language Model Platform API
+  version: 1.5.0
+  description: |
+    Production-ready AI developer interface for large language model inference,
+    chat completions, text embeddings, and real-time usage quotas.
+
+    ### Authentication:
+    Pass your secret API key via standard HTTP Bearer token:
+    `Authorization: Bearer sk-cortex-demo-live-token-2026`
+  contact:
+    name: Cortex Developer Platform Team
+    email: support@cortex-ai.example
+servers:
+  - url: http://localhost:3000
+    description: Primary Unified Portal Server
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Chat Completions
+    description: Conversational inference with multi-turn prompt context and tool invocation
+  - name: Embeddings
+    description: High-dimensional vector representations for semantic search and RAG
+  - name: Models
+    description: Model inventory, context window sizes, and modality capabilities
+  - name: Usage & Billing
+    description: Token consumption metrics, organization limits, and credit balance
+
+paths:
+  # =========================================================================
+  # Chat Completions
+  # =========================================================================
+  /api/v1/chat/completions:
+    post:
+      tags:
+        - Chat Completions
+      summary: Create Chat Completion
+      description: Generates a model response for the given list of conversational messages.
+      operationId: createChatCompletion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatCompletionRequest'
+      responses:
+        '200':
+          description: Chat completion response generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatCompletionResponse'
+        '400':
+          description: Invalid prompt schema or unparseable JSON
+        '401':
+          description: Missing or invalid API Key
+
+  # =========================================================================
+  # Embeddings
+  # =========================================================================
+  /api/v1/embeddings:
+    post:
+      tags:
+        - Embeddings
+      summary: Create Text Embeddings
+      description: Computes vector embeddings representing the input text for vector databases.
+      operationId: createEmbeddings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - model
+                - input
+              properties:
+                model:
+                  type: string
+                  default: text-embedding-3-small
+                  example: text-embedding-3-small
+                input:
+                  type: string
+                  example: 'OpenAPI portals enable interactive testing and documentation.'
+      responses:
+        '200':
+          description: Vector embeddings generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object:
+                    type: string
+                    example: list
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        index:
+                          type: integer
+                          example: 0
+                        embedding:
+                          type: array
+                          items:
+                            type: number
+                          example: [0.0124, -0.0432, 0.0891, -0.0041, 0.0512]
+                  model:
+                    type: string
+                    example: text-embedding-3-small
+                  usage:
+                    type: object
+                    properties:
+                      prompt_tokens:
+                        type: integer
+                        example: 9
+                      total_tokens:
+                        type: integer
+                        example: 9
+
+  # =========================================================================
+  # Models Directory
+  # =========================================================================
+  /api/v1/models:
+    get:
+      tags:
+        - Models
+      summary: List Available Models
+      description: Returns the active catalog of LLM models and their capabilities.
+      operationId: listModels
+      responses:
+        '200':
+          description: Model list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object:
+                    type: string
+                    example: list
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ModelCard'
+
+  # =========================================================================
+  # Usage & Quotas
+  # =========================================================================
+  /api/v1/usage:
+    get:
+      tags:
+        - Usage & Billing
+      summary: Get Usage Quotas & Token Balance
+      description: Real-time report of organization tokens consumed, remaining budget, and rate limit tier.
+      operationId: getUsageReport
+      responses:
+        '200':
+          description: Usage telemetry report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  organizationId:
+                    type: string
+                    example: org_cortex_enterprise_01
+                  tier:
+                    type: string
+                    example: Scale Tier 4
+                  currentPeriodUsageTokens:
+                    type: integer
+                    example: 2450890
+                  monthlyLimitTokens:
+                    type: integer
+                    example: 10000000
+                  rateLimitRpm:
+                    type: integer
+                    example: 5000
+                  balanceRemainingUsd:
+                    type: number
+                    example: 412.50
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: APIKey
+      description: 'Secret API key in Authorization: Bearer sk-...'
+
+  schemas:
+    ChatCompletionRequest:
+      type: object
+      required:
+        - model
+        - messages
+      properties:
+        model:
+          type: string
+          default: cortex-chat-v2
+          example: cortex-chat-v2
+        messages:
+          type: array
+          items:
+            type: object
+            required:
+              - role
+              - content
+            properties:
+              role:
+                type: string
+                enum: [system, user, assistant]
+                example: user
+              content:
+                type: string
+                example: How do I implement zero-trust cryptographic request signing?
+        temperature:
+          type: number
+          default: 0.7
+          minimum: 0.0
+          maximum: 2.0
+          example: 0.7
+        max_tokens:
+          type: integer
+          default: 512
+          example: 512
+
+    ChatCompletionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          example: chatcmpl_99a8b7c6
+        object:
+          type: string
+          example: chat.completion
+        created:
+          type: integer
+          example: 1789875147
+        model:
+          type: string
+          example: cortex-chat-v2
+        choices:
+          type: array
+          items:
+            type: object
+            properties:
+              index:
+                type: integer
+                example: 0
+              message:
+                type: object
+                properties:
+                  role:
+                    type: string
+                    example: assistant
+                  content:
+                    type: string
+                    example: |
+                      Zero-trust request signing commonly utilizes JSON Web Signatures (RFC 7515) with an asymmetric key (such as RS256 or ES256). The caller signs the HTTP payload and includes the detached signature and an RFC 3230 Digest header.
+              finish_reason:
+                type: string
+                example: stop
+        usage:
+          type: object
+          properties:
+            prompt_tokens:
+              type: integer
+              example: 18
+            completion_tokens:
+              type: integer
+              example: 54
+            total_tokens:
+              type: integer
+              example: 72
+
+    ModelCard:
+      type: object
+      properties:
+        id:
+          type: string
+          example: cortex-chat-v2
+        ownedBy:
+          type: string
+          example: cortex-ai
+        contextWindow:
+          type: integer
+          example: 128000
+        supportsVision:
+          type: boolean
+          example: true
+        supportsToolUse:
+          type: boolean
+          example: true

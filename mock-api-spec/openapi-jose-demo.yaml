@@ -1,0 +1,1334 @@
+openapi: 3.0.3
+info:
+  title: 'FinSecure Banking & Payments API'
+  version: 2.0.0
+  description: |
+    Comprehensive demonstration API showcasing all **JOSE (JSON Object Signing and Encryption)**
+    cryptographic security patterns using the `x-jose-security` OpenAPI extension:
+
+    ### 🔏 JSON Web Signature (JWS - RFC 7515 & RFC 7797)
+    - **Header Attached Signature**: RS256/ES256 compact JWS placed in `X-Signature` header
+    - **Detached Header Signature**: `header..signature` with RFC 3230 HTTP `Digest` (SHA-256) & RFC 7797 `b64`
+    - **Request Body JWS Token**: Pure compact JWS body for FAPI 1.0/2.0 & RFC 9101 JAR / PAR
+    - **Symmetric HMAC Signature**: HS256 pre-shared secret signing for webhooks and internal microservices
+    - **X.509 Certificate Chain & Thumbprint**: eIDAS / Open Banking compliance with `x5t#S256` and `x5c`
+    - **Critical Protected Headers (crit)**: RFC 7515 §4.1.11 strict header extension processing enforcement
+
+    ### 🔒 JSON Web Encryption (JWE - RFC 7516 & RFC 7518)
+    - **Asymmetric Key Wrap**: RSA-OAEP-256 + A256GCM compact 5-part JWE body
+    - **Elliptic Curve Key Agreement**: ECDH-ES+A256KW + A256GCM for mobile device binding
+    - **Direct Symmetric Encryption**: `dir` + A256GCM zero-overhead pre-shared key encryption
+    - **Symmetric AES Key Wrap**: A256KW + A128CBC-HS256 for batch clearing submissions
+    - **Encrypted Header Token**: JWE placed in `X-Encrypted-Token` header with cleartext JSON body
+    - **Pure Field-Level Encryption (Pure FLE)**: PCI-DSS sensitive fields encrypted into `encData`
+
+    ### 🛡️ Nested & Hybrid Patterns (Both JWS and JWE)
+    - **Full Body Sign-Then-Encrypt**: JWS inside JWE (`cty: JWT`) for high-value commercial transfers
+    - **FLE + Outer Request Signature (Pattern 1)**: Encrypted `encData` with signed outer JSON body
+    - **Nested FLE (Pattern 2)**: Inner sign-then-encrypt isolated inside `encData`
+
+    ### 🔄 Bidirectional Verification
+    - **Response Auto-Decryption & Signature Verification**: Automatic decryption and verification with remote JWKS discovery
+  contact:
+    name: FinSecure Cryptographic Engineering Team
+    email: crypto-sec@finsecure-bank.example
+servers:
+  - url: http://localhost:3000
+    description: Primary API Gateway (Unified Portal & Mock Server)
+
+x-default-keys:
+  rsaPrivateKey: &rsaPrivateKey |
+    -----BEGIN PRIVATE KEY-----
+    MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDJ65+9thr7Vn0N
+    LnESq9egGK32NG6wcXFbUw6usFWd4L3j/iR+t8Jwqx8LTtbKeilGs51+1JaAGJUS
+    PwIfgSei0V4vz3wuvMa0snqV9B7FxqbdWbKzLdgJXgDFJ9p/Ts9JQbRnFidIQqIk
+    fdG+13KXkd51TGuX9EpgAFCufL6/sUU4hm9SU/cwd3YD+ZkjBmvGoLztYQb789XZ
+    5Oa5q2VE4Fp415DI1vxt1A/JoftGvNlm+siDm3jrOI6F6lzKyHrwDOpUNiNNBeyH
+    8sjP7lBexKfK/5eW8ZuohYxd+VdcCHh086sXzPL33Vw/csvwQMUJ3QGBLD5kKtBi
+    c6ZaOCjdAgMBAAECggEAExUO9B1NIHqUd9XvPq35wzoB2rYqzcbyyQgo545nkPOH
+    zo+agFU6bW5mkSmCuADifLmFxVIu5O0tzVsiBrssdUEnDwqjOEGD39jMJ/a5n8Q9
+    ycZr0m4fMAdvuDIjfouCoHAyrdlUngoaC6vOUiRHQpa4+Mnfky01iCwPc+X7Gt9p
+    a6oss6S7JlthCglBbWA2Lrkl/JdTfVUir4e2AcoH968pjGtOqvNejQPPtB4jltsL
+    Xzd848EOJMjWBXRL+oj5l7y2h1W1oTwibu5tc8CbPlszJrDsdVSc79WHBFiJALVW
+    SLE99lDDefEF6M19j/aUjh7AugZ/XgjxQRZRaqbjOwKBgQDjiZWmCAhxIT2f5YGg
+    vtevGHgIjs8Ho128+re4DiaUJRQ6lrmrHgeSrSnjwUKL5WZFzYQy3Tsm2W00JTXH
+    KppJqv5kZXZhYkhQuD5XIh1xzU9D5H7kJaN6tm0EF+Ku/4/VPMg/HE7QobkvZGpM
+    4526NjEOvb5ysc1ZF1g6Xuy6swKBgQDjLbT7ZOVgRuFoR0C1bOXyMH2y1IYMdoG4
+    CnUEx0CLMw2w1kfY4mxQyrbqFnldBz73M+mHcRl1UCWiPrdLawb7cc72MV567b9B
+    SbT3LeLEXTxewkVMXdrRQa9tTw5F74sCvYLLdfR7IiTCksPzMufsj/RUcalh8XgC
+    yxK4ja+WLwKBgQCgbsUeYTGamsZ5tHgW4Bjxs34HArKE/zI76keZthiLgi1mNhpJ
+    xg2u5PvRQ9XpD+FxvDvHJWfst4ehKc9mU+qfoLpoDYZPmd3FVHNYOoyqTgnio/y4
+    XrWK84+gQDssCrPetVG39fy4bB9HhDTTa/YtcsJaU30yH53bgHNMDNw7swKBgQC+
+    fW/5MFQpk6WkU8LNnf9+QezUi+HPB3uj/5i5pf3X+rorIrJiCRH7+M7BoJCpUc8Z
+    Z30U5eAL/2VfEymM4rSbGIYK58CqYTpym0RT0zUHpIpfhpSnATffKS3ZAWYdfEva
+    w1+uDT0wFqQuRvRps7DHKrocKKZ4CwqvhOowuBWYXwKBgHq8JXHy66juEFXAc2xb
+    Osv1xQQmgjhy3Z9jLk3qREhENsyJQp3iMOXm/EcH8+sQvuhBBxsKRZxLVmKb+zaQ
+    W6vrLYKx5qvtYXeU6427GGwQYeRBleKChm0wE86tkTzYFU1clQvB0Qk1ANVzlRSs
+    N7LT5ed0R0A6KgDnorbC9FuF
+    -----END PRIVATE KEY-----
+  rsaPublicKey: &rsaPublicKey |
+    -----BEGIN PUBLIC KEY-----
+    MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyeufvbYa+1Z9DS5xEqvX
+    oBit9jRusHFxW1MOrrBVneC94/4kfrfCcKsfC07WynopRrOdftSWgBiVEj8CH4En
+    otFeL898LrzGtLJ6lfQexcam3Vmysy3YCV4AxSfaf07PSUG0ZxYnSEKiJH3Rvtdy
+    l5HedUxrl/RKYABQrny+v7FFOIZvUlP3MHd2A/mZIwZrxqC87WEG+/PV2eTmuatl
+    ROBaeNeQyNb8bdQPyaH7RrzZZvrIg5t46ziOhepcysh68AzqVDYjTQXsh/LIz+5Q
+    XsSnyv+XlvGbqIWMXflXXAh4dPOrF8zy991cP3LL8EDFCd0BgSw+ZCrQYnOmWjgo
+    3QIDAQAB
+    -----END PUBLIC KEY-----
+  ecPrivateKey: &ecPrivateKey |
+    -----BEGIN PRIVATE KEY-----
+    MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgyEAZypomOL8Jk21R
+    gD5i291fkmV54yAkGHckWIkcMVqhRANCAAT4UuvVlRkYOd6oOaL5X66m8SPNmMmX
+    6JoqBR7fDaiNasXTWH4VD3jTXvZiLnP+ksc4isa6jBPjnDWAOPNpvpM2
+    -----END PRIVATE KEY-----
+  ecPublicKey: &ecPublicKey |
+    -----BEGIN PUBLIC KEY-----
+    MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE+FLr1ZUZGDneqDmi+V+upvEjzZjJ
+    l+iaKgUe3w2ojWrF01h+FQ940172Yi5z/pLHOIrGuowT45w1gDjzab6TNg==
+    -----END PUBLIC KEY-----
+  symmetricSecret: &symmetricKey "53b45d893030c075395d5b5c310a22e59442834d4e5d41705ddbdd6edf76feaa"
+
+
+tags:
+  - name: JWS Signatures
+    description: Digitally signed workflows (Header, Detached, Body, Symmetric HMAC, X.509 Thumbprints)
+  - name: JWE Encryption
+    description: Confidential payload encryption (RSA-OAEP, ECDH-ES, Direct Symmetric, AES Key Wrap, Header, Pure FLE)
+  - name: 'Nested & Hybrid JOSE'
+    description: Multi-layer defense combining non-repudiation signing with payload encryption
+  - name: Bidirectional Verification
+    description: End-to-end cryptographic verification and response auto-decryption
+  - name: Public
+    description: Standard unauthenticated endpoints without JOSE security
+
+paths:
+
+  # =========================================================================
+  # 1. JWS: Header-Attached Signature (RS256)
+  # =========================================================================
+  /api/v1/payments/create:
+    post:
+      tags:
+        - JWS Signatures
+      summary: Create Signed Payment (JWS Header)
+      description: |
+        Initiates a payment transaction. The request body is digitally signed using
+        the client's private key (RS256). The resulting compact 3-part JWS token is attached
+        to the `X-Signature` HTTP header.
+      operationId: createSignedPayment
+      x-jose-security:
+        enabled: true
+        mode: jws
+        sign:
+          alg: RS256
+          headerName: X-Signature
+          placement: header
+          detached: false
+          kid: partner-signer-2026
+          defaultKey: *rsaPrivateKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - debtorIban
+                - creditorIban
+                - amount
+                - currency
+              properties:
+                debtorIban:
+                  type: string
+                  example: DE89370400440532013000
+                creditorIban:
+                  type: string
+                  example: FR1420041010050500013M02606
+                amount:
+                  type: number
+                  example: 1250.50
+                currency:
+                  type: string
+                  example: EUR
+                reference:
+                  type: string
+                  example: INV-2026-0901
+      responses:
+        '201':
+          description: Payment Created Successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  paymentId:
+                    type: string
+                    example: pmnt_98a72b11e4
+                  status:
+                    type: string
+                    example: PENDING_EXECUTION
+
+  # =========================================================================
+  # 2. JWS: Detached Signature with RFC 3230 Digest (ES256)
+  # =========================================================================
+  /api/v1/payments/instant-transfer:
+    post:
+      tags:
+        - JWS Signatures
+      summary: Instant Transfer (Detached JWS + HTTP Digest)
+      description: |
+        Executes an instant SEPA transfer. The signature is computed over the payload
+        and placed in `X-JWS-Signature` in detached format (`header..signature`),
+        leaving the original JSON body intact for intermediate proxy inspection.
+        An RFC 3230 `Digest: SHA-256=...` header is computed before signing.
+      operationId: instantTransferDetached
+      x-jose-security:
+        enabled: true
+        mode: jws
+        computeDigest: true
+        digestAlgorithm: SHA-256
+        sign:
+          alg: ES256
+          headerName: X-JWS-Signature
+          placement: header
+          detached: true
+          includeIat: true
+          includeJti: true
+          b64: true
+          defaultKey: *ecPrivateKey
+          crit:
+            - b64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - transferId
+                - amount
+                - debtorAccount
+                - creditorAccount
+              properties:
+                transferId:
+                  type: string
+                  example: trns_7c8d9e0f
+                amount:
+                  type: number
+                  example: 500.00
+                currency:
+                  type: string
+                  example: EUR
+                debtorAccount:
+                  type: string
+                  example: NL91ABNA0417164300
+                creditorAccount:
+                  type: string
+                  example: DE02100100100123456789
+      responses:
+        '200':
+          description: Instant Transfer Executed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transferId:
+                    type: string
+                    example: trns_7c8d9e0f
+                  clearedAt:
+                    type: string
+                    example: '2026-09-04T12:00:00Z'
+                  status:
+                    type: string
+                    example: SETTLED
+
+  # =========================================================================
+  # 3. JWS: Request Body Placement (PS256 - FAPI / RFC 9101 JAR / PAR)
+  # =========================================================================
+  /api/v1/oauth2/par:
+    post:
+      tags:
+        - JWS Signatures
+      summary: Pushed Authorization Request (JWS Body Token)
+      description: |
+        Financial-grade API (FAPI 1.0 Advanced / FAPI 2.0) Pushed Authorization Request (RFC 9101 JAR & RFC 9126 PAR).
+        The entire JSON request body is digitally signed into a compact JWS token (`header.payload.signature`)
+        using RSASSA-PSS (PS256). The outbound Content-Type is set to `application/jose`.
+      operationId: pushedAuthorizationRequest
+      x-jose-security:
+        enabled: true
+        mode: jws
+        sign:
+          alg: PS256
+          placement: body
+          includeIat: true
+          includeJti: true
+          kid: client-fapi-ps256-key
+          defaultKey: *rsaPrivateKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - client_id
+                - response_type
+                - redirect_uri
+                - scope
+                - state
+              properties:
+                client_id:
+                  type: string
+                  example: finsecure-partner-portal-01
+                response_type:
+                  type: string
+                  example: code
+                redirect_uri:
+                  type: string
+                  example: https://partner.example.com/oauth/callback
+                scope:
+                  type: string
+                  example: openid accounts payments
+                state:
+                  type: string
+                  example: af0ifjsldkj
+                code_challenge:
+                  type: string
+                  example: E9Melhoa2OwvFrGMTJguCH5rtx64ZnqiFuEsbURMbTM
+                code_challenge_method:
+                  type: string
+                  example: S256
+      responses:
+        '201':
+          description: PAR Request URI Generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  request_uri:
+                    type: string
+                    example: urn:ietf:params:oauth:request_uri:bwc4JK-5OaFutcCW3_2lQG6KnUs
+                  expires_in:
+                    type: integer
+                    example: 90
+
+  # =========================================================================
+  # 4. JWS: Symmetric Shared Key HMAC Signature (HS256)
+  # =========================================================================
+  /api/v1/webhooks/incoming-settlement:
+    post:
+      tags:
+        - JWS Signatures
+      summary: Incoming Settlement Webhook (Symmetric HS256)
+      description: |
+        Processes automated batch settlement events dispatched between trusted payment rails.
+        The outbound JSON payload is cryptographically signed using a pre-shared 256-bit symmetric key
+        (HMAC SHA-256) attached to the `X-HMAC-Signature` header.
+      operationId: processSettlementWebhook
+      x-jose-security:
+        enabled: true
+        mode: jws
+        sign:
+          alg: HS256
+          headerName: X-HMAC-Signature
+          placement: header
+          includeIat: true
+          kid: symmetric-key-01
+          defaultKey: *symmetricKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - eventId
+                - batchId
+                - totalSettled
+                - currency
+              properties:
+                eventId:
+                  type: string
+                  example: evt_batch_9921
+                batchId:
+                  type: string
+                  example: bch_sepa_20260904_01
+                totalSettled:
+                  type: number
+                  example: 184500.75
+                currency:
+                  type: string
+                  example: EUR
+                recordsCount:
+                  type: integer
+                  example: 320
+      responses:
+        '200':
+          description: Webhook Acknowledged
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  received:
+                    type: boolean
+                    example: true
+                  batchStatus:
+                    type: string
+                    example: ACKNOWLEDGED
+
+  # =========================================================================
+  # 5. JWS: X.509 Certificate Chain & Thumbprint (x5t#S256 / x5c)
+  # =========================================================================
+  /api/v1/compliance/eidas-report:
+    post:
+      tags:
+        - JWS Signatures
+      summary: eIDAS Regulatory Report (x5t#S256 / x5c Cert Header)
+      description: |
+        Submits regulatory transaction reporting per eIDAS / Berlin Group NextGenPSD2 specifications.
+        The JWS protected header embeds the SHA-256 certificate thumbprint (`x5t#S256`) and full X.509
+        certificate chain (`x5c`), proving non-repudiation and qualified certificate binding.
+      operationId: submitEidasReport
+      x-jose-security:
+        enabled: true
+        mode: jws
+        sign:
+          alg: ES256
+          headerName: X-Signature
+          placement: header
+          x5t: true
+          x5c: true
+          includeIat: true
+          kid: qtsp-eidas-cert-2026
+          defaultKey: *ecPrivateKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reportPeriod
+                - financialInstitutionCode
+                - fraudRatioBps
+              properties:
+                reportPeriod:
+                  type: string
+                  example: 2026-Q3
+                financialInstitutionCode:
+                  type: string
+                  example: BANKDEFFXXX
+                totalVolumeEur:
+                  type: number
+                  example: 450000000.00
+                fraudRatioBps:
+                  type: number
+                  example: 1.25
+      responses:
+        '200':
+          description: eIDAS Report Accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reportId:
+                    type: string
+                    example: rep_eidas_2026_9941
+                  acknowledgementToken:
+                    type: string
+                    example: ack_valid_eidas_sig
+
+  # =========================================================================
+  # 6. JWS: Critical Protected Header Parameters (RFC 7515 crit + Custom Headers)
+  # =========================================================================
+  /api/v1/payments/corporate-transfer:
+    post:
+      tags:
+        - JWS Signatures
+      summary: Corporate Transfer (Critical Headers - RFC 7515 crit)
+      description: |
+        Processes an institutional corporate transfer requiring strict compliance with
+        custom protected header policies. In accordance with RFC 7515 §4.1.11, the JWS protected
+        header includes the `crit` parameter specifying required extension headers (`b64`,
+        `x-custom-tenant-id`, `x-policy-version`) that the recipient MUST recognize and process.
+      operationId: corporateTransferWithCrit
+      x-jose-security:
+        enabled: true
+        mode: jws
+        sign:
+          alg: ES256
+          headerName: X-Signature
+          placement: header
+          includeIat: true
+          b64: true
+          kid: partner-signer-2026
+          defaultKey: *ecPrivateKey
+          customHeaders:
+            x-custom-tenant-id: tenant-corp-8891
+            x-policy-version: 2026-v2
+          crit:
+            - b64
+            - x-custom-tenant-id
+            - x-policy-version
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - corporateId
+                - amount
+                - currency
+              properties:
+                corporateId:
+                  type: string
+                  example: CORP-GLOBAL-4412
+                amount:
+                  type: number
+                  example: 500000.00
+                currency:
+                  type: string
+                  example: USD
+                memo:
+                  type: string
+                  example: Quarterly dividend distribution
+      responses:
+        '201':
+          description: Corporate Transfer Accepted with Critical Parameters Validated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transferId:
+                    type: string
+                    example: corp_trns_7a8b9c
+                  status:
+                    type: string
+                    example: ACCEPTED_CRITICAL_VALIDATED
+                  timestamp:
+                    type: string
+                    example: '2026-09-04T12:00:00Z'
+
+  # =========================================================================
+  # 6b. JWS: Header Signature with Body Digest in Payload (PS256)
+  # =========================================================================
+  /api/v1/payments/orders:
+    post:
+      tags:
+        - JWS Signatures
+      summary: Create Order (Body Digest Claim in JWS Payload)
+      description: |
+        Demonstrates the decoupled payload digest pattern (common in PolishAPI, Italian SPID, and eIDAS):
+        The HTTP body is sent as clean `application/json`. The `X-Signature` header contains a signed JWS token
+        whose payload claims set holds the computed SHA-256 digest of the body (`{ "digest": "SHA-256=...", "iat": ..., "jti": ... }`).
+      operationId: createOrderWithPayloadDigest
+      x-jose-security:
+        enabled: true
+        mode: jws
+        digestAlgorithm: SHA-256
+        sign:
+          alg: PS256
+          headerName: X-Signature
+          placement: header
+          digestInPayload: true
+          digestClaimName: digest
+          includeIat: true
+          includeJti: true
+          kid: client-fapi-ps256-key
+          defaultKey: *rsaPrivateKey
+          claims:
+            iss: 'https://finsecure.bank.com'
+            aud: 'https://api.partner.com'
+            scope: 'orders:create'
+            jti:
+              type: uuid
+            iat:
+              type: unix
+              autoNow: true
+            exp:
+              type: unix
+              autoNow: true
+            settlementDate:
+              type: date
+              autoNow: true
+            isPriority:
+              type: boolean
+              value: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - orderId
+                - amount
+                - currency
+              properties:
+                orderId:
+                  type: string
+                  example: ord_99210
+                amount:
+                  type: number
+                  example: 1250.00
+                currency:
+                  type: string
+                  example: EUR
+                merchantId:
+                  type: string
+                  example: merch_finsecure_88
+      responses:
+        '201':
+          description: Order Confirmed with Payload Digest Verified
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orderId:
+                    type: string
+                    example: ord_99210
+                  status:
+                    type: string
+                    example: CONFIRMED
+
+  # =========================================================================
+  # 7. JWE: Asymmetric Full Body Encryption (RSA-OAEP-256 + A256GCM)
+  # =========================================================================
+  /api/v1/cards/tokenize:
+    post:
+      tags:
+        - JWE Encryption
+      summary: Tokenize Card Data (JWE Body - RSA-OAEP-256)
+      description: |
+        Vaults sensitive cardholder data (PAN, CVV, Expiry). The entire JSON body
+        is encrypted into a 5-part compact JWE token using RSA-OAEP-256 key management
+        and A256GCM authenticated content encryption.
+        The outbound Content-Type is automatically set to `application/jose`.
+      operationId: tokenizeCardData
+      x-jose-security:
+        enabled: true
+        mode: jwe
+        encrypt:
+          alg: RSA-OAEP-256
+          enc: A256GCM
+          placement: body
+          kid: bank-vault-public-2026
+          defaultKey: *rsaPublicKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - cardNumber
+                - expiryMonth
+                - expiryYear
+                - cvv
+              properties:
+                cardNumber:
+                  type: string
+                  example: '4532710012348901'
+                expiryMonth:
+                  type: string
+                  example: '12'
+                expiryYear:
+                  type: string
+                  example: '2028'
+                cvv:
+                  type: string
+                  example: '382'
+                cardholderName:
+                  type: string
+                  example: Sarah Connor
+      responses:
+        '200':
+          description: Tokenization Successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cardToken:
+                    type: string
+                    example: tok_visa_453271_9823
+                  maskedPan:
+                    type: string
+                    example: '************8901'
+
+  # =========================================================================
+  # 7. JWE: Elliptic Curve Key Agreement (ECDH-ES+A256KW + A256GCM)
+  # =========================================================================
+  /api/v1/mobile/device-binding:
+    post:
+      tags:
+        - JWE Encryption
+      summary: Mobile Device Binding (ECDH-ES+A256KW JWE Body)
+      description: |
+        Registers a secure mobile hardware token using Ephemeral-Static Elliptic Curve
+        Diffie-Hellman Key Agreement (ECDH-ES with AES-256 Key Wrap) over curve P-256.
+        The payload is encrypted for the gateway's EC public key, establishing forward secrecy.
+      operationId: registerDeviceBinding
+      x-jose-security:
+        enabled: true
+        mode: jwe
+        encrypt:
+          alg: ECDH-ES+A256KW
+          enc: A256GCM
+          placement: body
+          kid: gateway-ecdh-p256-key
+          defaultKey: *ecPublicKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - deviceId
+                - appInstanceId
+                - hardwareAttestationNonce
+              properties:
+                deviceId:
+                  type: string
+                  example: dev_iphone_15_pro_99a8b7
+                appInstanceId:
+                  type: string
+                  example: inst_f47ac10b-58cc-4372-a567-0e02b2c3d479
+                hardwareAttestationNonce:
+                  type: string
+                  example: W52K5l9aF8a9J1p0Xz99
+                biometricType:
+                  type: string
+                  example: FaceID
+      responses:
+        '201':
+          description: Device Bound Successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bindingId:
+                    type: string
+                    example: bind_mobile_2026_0981
+                  status:
+                    type: string
+                    example: ACTIVE
+
+  # =========================================================================
+  # 8. JWE: Direct Symmetric Encryption (dir + A256GCM)
+  # =========================================================================
+  /api/v1/vault/symmetric-secret:
+    post:
+      tags:
+        - JWE Encryption
+      summary: Direct Symmetric Encryption (dir + A256GCM)
+      description: |
+        Synchronizes configuration secrets across distributed microservices using Direct
+        Symmetric Encryption (`alg: dir`). The CEK (Content Encryption Key) is pre-shared,
+        resulting in an empty second part (`encryptedKey`) in the compact JWE token.
+      operationId: syncSymmetricSecret
+      x-jose-security:
+        enabled: true
+        mode: jwe
+        encrypt:
+          alg: dir
+          enc: A256GCM
+          placement: body
+          kid: symmetric-key-01
+          defaultKey: *symmetricKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - secretNamespace
+                - keyValues
+              properties:
+                secretNamespace:
+                  type: string
+                  example: production/database/credentials
+                keyValues:
+                  type: object
+                  example:
+                    DB_USER: payment_service_prod
+                    DB_PASS: super-secret-passphrase-2026
+      responses:
+        '200':
+          description: Secret Synchronized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  syncedAt:
+                    type: string
+                    example: '2026-09-04T12:05:00Z'
+                  version:
+                    type: integer
+                    example: 4
+
+  # =========================================================================
+  # 9. JWE: Symmetric AES Key Wrap (A256KW + A128CBC-HS256)
+  # =========================================================================
+  /api/v1/batch/clearing-file:
+    post:
+      tags:
+        - JWE Encryption
+      summary: Clearing Batch Submission (A256KW + A128CBC-HS256)
+      description: |
+        Submits bulk clearing records encrypted using AES-256 Key Wrap (`A256KW`) with
+        Composite AES-CBC and HMAC-SHA-256 (`A128CBC-HS256`) per RFC 7518 §4.4.
+        Combines symmetric key wrapping with authenticated content cipher streams.
+      operationId: submitClearingBatch
+      x-jose-security:
+        enabled: true
+        mode: jwe
+        encrypt:
+          alg: A256KW
+          enc: A128CBC-HS256
+          placement: body
+          kid: symmetric-key-01
+          defaultKey: *symmetricKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - clearingCycle
+                - totalTransactions
+                - settlementAmount
+              properties:
+                clearingCycle:
+                  type: string
+                  example: 2026-CYCLE-14
+                totalTransactions:
+                  type: integer
+                  example: 15420
+                settlementAmount:
+                  type: number
+                  example: 12450890.30
+                currency:
+                  type: string
+                  example: EUR
+      responses:
+        '202':
+          description: Batch Accepted for Processing
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId:
+                    type: string
+                    example: job_clr_20260904_8891
+                  state:
+                    type: string
+                    example: INGESTED
+
+  # =========================================================================
+  # 10. JWE: Header Placement (X-Encrypted-Token)
+  # =========================================================================
+  /api/v1/sessions/exchange:
+    post:
+      tags:
+        - JWE Encryption
+      summary: Exchange Session Ticket (JWE in Header)
+      description: |
+        Exchanges client identity proofs for an authorized gateway session. The confidential
+        session ticket is encrypted into a JWE compact token and placed in the
+        `X-Encrypted-Token` HTTP header, while the cleartext request body conveys standard metadata.
+      operationId: exchangeSessionTicket
+      x-jose-security:
+        enabled: true
+        mode: jwe
+        encrypt:
+          alg: RSA-OAEP-256
+          enc: A256GCM
+          placement: header
+          headerName: X-Encrypted-Token
+          kid: bank-vault-public-2026
+          defaultKey: *rsaPublicKey
+          claims:
+            clientId: 'client_mobile_pos_001'
+            sessionNonce: 'nonce_98a72b11'
+            scope: 'sessions:exchange'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - clientId
+                - grantType
+              properties:
+                clientId:
+                  type: string
+                  example: client_mobile_pos_001
+                grantType:
+                  type: string
+                  example: urn:ietf:params:oauth:grant-type:token-exchange
+                requestedLifetimeSeconds:
+                  type: integer
+                  example: 3600
+      responses:
+        '200':
+          description: Session Established
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessionId:
+                    type: string
+                    example: sess_7f8a9b0c1d
+                  expiresIn:
+                    type: integer
+                    example: 3600
+
+  # =========================================================================
+  # 11. JWE: Pure Field-Level Encryption (Pure FLE)
+  # =========================================================================
+  /api/v1/checkout/direct-charge:
+    post:
+      tags:
+        - JWE Encryption
+      summary: Direct Charge (Pure Field-Level Encryption)
+      description: |
+        PCI-DSS compliant direct payment charge with Field-Level Encryption (Pure FLE):
+        - Cleartext routing metadata (`orderId`, `merchantId`, `amount`, `currency`) remains untouched.
+        - Sensitive cardholder fields (`cardNumber`, `cvv`, `expiryMonth`, `expiryYear`) are extracted
+          and encrypted into a JWE compact string placed in `encData`.
+        - No outer digital signature is required for this standard gateway intake pattern.
+      operationId: directChargePureFle
+      x-jose-security:
+        enabled: true
+        mode: jwe
+        encrypt:
+          alg: RSA-OAEP-256
+          enc: A256GCM
+          placement: field
+          targetField: encData
+          fields:
+            - cardNumber
+            - cvv
+            - expiryMonth
+            - expiryYear
+          kid: bank-vault-public-2026
+          defaultKey: *rsaPublicKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - orderId
+                - merchantId
+                - amount
+                - currency
+                - encData
+              properties:
+                orderId:
+                  type: string
+                  example: ord_ecom_2026_99812
+                merchantId:
+                  type: string
+                  example: merch_nordic_retail_01
+                amount:
+                  type: number
+                  example: 89.95
+                currency:
+                  type: string
+                  example: EUR
+                encData:
+                  type: object
+                  description: 'Encrypted cardholder payload (JWE compact string replacing sensitive fields)'
+                  required:
+                    - cardNumber
+                    - cvv
+                    - expiryMonth
+                    - expiryYear
+                  properties:
+                    cardNumber:
+                      type: string
+                      example: '4532710012348901'
+                    cvv:
+                      type: string
+                      example: '821'
+                    expiryMonth:
+                      type: string
+                      example: '08'
+                    expiryYear:
+                      type: string
+                      example: '2029'
+      responses:
+        '200':
+          description: Charge Authorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  chargeId:
+                    type: string
+                    example: chg_99182ab3
+                  status:
+                    type: string
+                    example: AUTHORIZED
+
+  # =========================================================================
+  # 12. Nested JOSE: Sign-then-Encrypt Full Body (JWS inside JWE)
+  # =========================================================================
+  /api/v1/banking/wire-transfer:
+    post:
+      tags:
+        - 'Nested & Hybrid JOSE'
+      summary: High-Value Wire Transfer (Nested Sign & Encrypt)
+      description: |
+        Processes a high-value commercial wire transfer requiring non-repudiation
+        and end-to-end confidentiality.
+        1. Raw JSON body is first digitally signed with client's private key (RS256).
+        2. The resulting JWS token is then encrypted with the bank's public key (RSA-OAEP-256 / A256GCM).
+        3. JWE protected header automatically includes `cty: "JWT"`.
+      operationId: highValueWireTransfer
+      x-jose-security:
+        enabled: true
+        mode: both
+        sign:
+          alg: RS256
+          kid: partner-signer-2026
+          defaultKey: *rsaPrivateKey
+        encrypt:
+          alg: RSA-OAEP-256
+          enc: A256GCM
+          placement: body
+          kid: bank-vault-public-2026
+          defaultKey: *rsaPublicKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - commercialWireId
+                - amount
+                - authorizingOfficer
+              properties:
+                commercialWireId:
+                  type: string
+                  example: WIRE-2026-X990
+                amount:
+                  type: number
+                  example: 2500000.00
+                currency:
+                  type: string
+                  example: USD
+                authorizingOfficer:
+                  type: string
+                  example: Jane Doe (VP Finance)
+      responses:
+        '202':
+          description: Wire Transfer Accepted for Clearing
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  wireReference:
+                    type: string
+                    example: FED-WIRE-20260904-88712
+                  status:
+                    type: string
+                    example: CLEARING_QUEUED
+
+  # =========================================================================
+  # 13. FLE Pattern 1: Field-Level Encryption + Outer Request Signature
+  # =========================================================================
+  /api/v1/cards/verify-pin:
+    post:
+      tags:
+        - 'Nested & Hybrid JOSE'
+      summary: Verify Card PIN (FLE + Outer JWS Signature)
+      description: |
+        Demonstrates Field-Level Encryption combined with Request Digital Signatures:
+        1. Sensitive fields (`pin` and `account`) are encrypted into a JWE compact token placed inside `encData`.
+        2. The resulting outer JSON body (including `requestId`, `partnerId`, and `encData`) is signed into the `X-Signature` header.
+        3. Cleartext routing metadata remains visible to gateways while sensitive PIN data is protected end-to-end.
+      operationId: verifyCardPin
+      x-jose-security:
+        enabled: true
+        mode: both
+        sign:
+          alg: RS256
+          headerName: X-Signature
+          placement: header
+          kid: partner-signer-2026
+          defaultKey: *rsaPrivateKey
+        encrypt:
+          alg: RSA-OAEP-256
+          enc: A256GCM
+          placement: field
+          targetField: encData
+          fields:
+            - pin
+            - account
+          kid: bank-vault-public-2026
+          defaultKey: *rsaPublicKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - requestId
+                - partnerId
+                - encData
+              properties:
+                requestId:
+                  type: string
+                  example: req_992140
+                partnerId:
+                  type: string
+                  example: partner_eu_01
+                encData:
+                  type: object
+                  description: 'Field-Level Encrypted payload (JWE compact token wrapping sensitive fields)'
+                  required:
+                    - pin
+                    - account
+                  properties:
+                    pin:
+                      type: integer
+                      example: 1234
+                    account:
+                      type: string
+                      example: '234567654'
+      responses:
+        '200':
+          description: PIN Verified Successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                    example: true
+                  authCode:
+                    type: string
+                    example: AUTH_PIN_OK_8829
+
+  # =========================================================================
+  # 14. FLE Pattern 2: Nested Field-Level Encryption inside encData
+  # =========================================================================
+  /api/v1/cards/update-credentials:
+    post:
+      tags:
+        - 'Nested & Hybrid JOSE'
+      summary: 'Update Credentials (Nested FLE: Sign-Then-Encrypt)'
+      description: |
+        Demonstrates Nested Field-Level Encryption (Sign-Then-Encrypt inside `encData`):
+        1. Sensitive fields (`newPin` and `pukCode`) are signed with the client's private key into an inner JWS token.
+        2. The inner JWS token is encrypted with the recipient's public key into a JWE compact string placed in `encData`.
+        3. The outer JSON body retains cleartext routing fields (`requestId`, `cardToken`).
+      operationId: updateCardCredentials
+      x-jose-security:
+        enabled: true
+        mode: both
+        sign:
+          alg: RS256
+          placement: field
+          kid: partner-signer-2026
+          defaultKey: *rsaPrivateKey
+        encrypt:
+          alg: RSA-OAEP-256
+          enc: A256GCM
+          placement: field
+          targetField: encData
+          fields:
+            - newPin
+            - pukCode
+          kid: hsm-vault-2026
+          defaultKey: *rsaPublicKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - requestId
+                - cardToken
+                - encData
+              properties:
+                requestId:
+                  type: string
+                  example: req_upd_8831
+                cardToken:
+                  type: string
+                  example: tok_visa_4532_9901
+                encData:
+                  type: object
+                  description: 'Nested Field-Level Encrypted payload (Sign-Then-Encrypt JWE compact token)'
+                  required:
+                    - newPin
+                    - pukCode
+                  properties:
+                    newPin:
+                      type: integer
+                      example: 9876
+                    pukCode:
+                      type: string
+                      example: '88219472'
+      responses:
+        '200':
+          description: Credentials Updated Successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: credentials_updated
+
+  # =========================================================================
+  # 15. Bidirectional: Response Auto-Decryption & Signature Verification
+  # =========================================================================
+  /api/v1/banking/account-statement:
+    post:
+      tags:
+        - Bidirectional Verification
+      summary: Download Account Statement (Response Verification & Decryption)
+      description: |
+        Demonstrates end-to-end bidirectional JOSE security:
+        1. Outbound request is digitally signed (`ES256`) with HTTP `Digest` computation.
+        2. Inbound gateway response is automatically decrypted (`decryptResponse: true`) using the client's
+           private key and cryptographically verified (`verifyResponse: true`) against remote JWKS discovery.
+      operationId: getAccountStatement
+      x-jose-security:
+        enabled: true
+        mode: jws
+        computeDigest: true
+        digestAlgorithm: SHA-256
+        verifyResponse: true
+        decryptResponse: true
+        jwksUri: https://sandbox.finsecure-bank.example/.well-known/jwks.json
+        sign:
+          alg: ES256
+          headerName: X-Signature
+          placement: header
+          includeIat: true
+          includeJti: true
+          kid: client-ec-key-2026
+          defaultKey: *ecPrivateKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - accountId
+                - startDate
+                - endDate
+              properties:
+                accountId:
+                  type: string
+                  example: acc_eur_88192301
+                startDate:
+                  type: string
+                  example: '2026-08-01'
+                endDate:
+                  type: string
+                  example: '2026-08-31'
+                format:
+                  type: string
+                  example: JSON
+      responses:
+        '200':
+          description: Encrypted & Signed Statement Delivered
+          content:
+            application/jose:
+              schema:
+                type: string
+                description: Compact JWE wrapping an inner signed JWS statement
+
+  # =========================================================================
+  # 16. Standard Public Endpoint (No JOSE)
+  # =========================================================================
+  /api/v1/health:
+    get:
+      tags:
+        - Public
+      summary: Gateway Health Check
+      description: |
+        Returns service operational status without requiring JOSE cryptography.
+      operationId: getHealthStatus
+      security: []
+      parameters:
+        - name: verbose
+          in: query
+          description: Return detailed component health breakdown and telemetry
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: component
+          in: query
+          description: Filter health check to a specific subsystem
+          required: false
+          schema:
+            type: string
+            default: all
+            enum:
+              - all
+              - database
+              - hsm
+              - gateway
+        - name: timeout
+          in: query
+          description: Health check timeout threshold in seconds
+          required: false
+          schema:
+            type: integer
+            default: 5
+            minimum: 1
+            maximum: 30
+      responses:
+        '200':
+          description: Gateway Healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: pass
+                  timestamp:
+                    type: string
+                    example: '2026-09-04T12:00:00Z'
+                  version:
+                    type: string
+                    example: 2.0.0
+
+

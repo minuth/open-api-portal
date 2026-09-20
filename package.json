@@ -5,12 +5,12 @@
   "main": "src/index.tsx",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.tsx",
+    "dev": "tsx watch --env-file-if-exists=.env src/index.tsx",
+    "dev:mock": "tsx watch --env-file-if-exists=.env src/index.tsx",
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "node --env-file-if-exists=.env dist/index.js",
     "db:generate": "drizzle-kit generate",
-    "mock": "npm --prefix mock-server run dev",
-    "mock:test": "npm --prefix mock-server test"
+    "test:mock": "tsx --env-file-if-exists=.env test/mock-api-test.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.0",

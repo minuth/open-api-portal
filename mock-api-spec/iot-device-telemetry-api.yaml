@@ -1,0 +1,318 @@
+openapi: 3.0.3
+info:
+  title: PulseFleet IoT Telemetry & Edge Device Management API
+  version: 2.1.0
+  description: |
+    Industrial IoT sensor telemetry ingestion platform, edge gateway management,
+    device twin / shadow synchronization, and remote command actuation.
+
+    ### Authentication:
+    - **Device Ingestion**: Authenticate via Basic Auth with Device ID & Hardware Secret:
+      `Authorization: Basic ZGV2X2VkZ2VfODAxMjpzZWNyZXRfaGFzaF85OTQ=`
+    - **Fleet Gateway**: Or via custom edge token header:
+      `X-Device-Token: dev_tok_edge_live_9921`
+  contact:
+    name: PulseFleet Embedded Systems Group
+    email: iot-gateway@pulsefleet.example
+servers:
+  - url: http://localhost:3000
+    description: Primary Unified Portal Server
+
+security:
+  - BasicAuth: []
+  - DeviceTokenAuth: []
+
+tags:
+  - name: Telemetry Ingestion
+    description: High-frequency time-series sensor ingestion (thermal, vibrational, power)
+  - name: Device Fleet
+    description: Device registry, hardware profiles, and connectivity status
+  - name: Device Shadow (Twin)
+    description: Synchronization of desired configuration vs. reported hardware state
+  - name: Remote Actuation
+    description: Over-The-Air (OTA) updates, calibration routines, and hardware resets
+
+paths:
+  # =========================================================================
+  # Telemetry Ingestion
+  # =========================================================================
+  /api/v1/iot/telemetry:
+    post:
+      tags:
+        - Telemetry Ingestion
+      summary: Ingest Device Sensor Telemetry
+      description: Receives time-series sensor readings, validates thresholds, and persists data points.
+      operationId: ingestTelemetry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TelemetryPayload'
+      responses:
+        '202':
+          description: Telemetry data accepted and queued for time-series pipeline
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: QUEUED
+                  receivedRecords:
+                    type: integer
+                    example: 3
+                  batchId:
+                    type: string
+                    example: bth_iot_99214a
+                  serverTimestamp:
+                    type: string
+                    example: '2026-09-20T03:35:00Z'
+        '400':
+          description: Malformed telemetry data
+        '401':
+          description: Invalid device credentials
+
+  # =========================================================================
+  # Device Fleet Directory
+  # =========================================================================
+  /api/v1/iot/devices:
+    get:
+      tags:
+        - Device Fleet
+      summary: List Registered Devices
+      description: Returns fleet units filtered by operational status, firmware version, or zone.
+      operationId: listDevices
+      parameters:
+        - name: zone
+          in: query
+          description: Factory floor or geographic sector
+          required: false
+          schema:
+            type: string
+            default: Zone-North-Plant
+            example: Zone-North-Plant
+        - name: status
+          in: query
+          description: Connectivity status filter
+          required: false
+          schema:
+            type: string
+            enum: [all, online, offline, degraded]
+            default: online
+      responses:
+        '200':
+          description: Fleet devices list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                    example: 2
+                  devices:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Device'
+
+  # =========================================================================
+  # Device Shadow
+  # =========================================================================
+  /api/v1/iot/devices/{deviceId}/shadow:
+    get:
+      tags:
+        - Device Shadow (Twin)
+      summary: Get Device Shadow State
+      description: Returns the device twin showing desired configuration and actual reported hardware state.
+      operationId: getDeviceShadow
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+            default: dev_edge_8012
+            example: dev_edge_8012
+      responses:
+        '200':
+          description: Device shadow document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceShadow'
+
+  # =========================================================================
+  # Remote Actuation & Commands
+  # =========================================================================
+  /api/v1/iot/devices/{deviceId}/commands:
+    post:
+      tags:
+        - Remote Actuation
+      summary: Dispatch Remote Device Command
+      description: Enqueues an actuation directive to the edge node via MQTT/HTTP down-channel.
+      operationId: dispatchDeviceCommand
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+            default: dev_edge_8012
+            example: dev_edge_8012
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - command
+              properties:
+                command:
+                  type: string
+                  enum: [reboot, calibrate_sensors, ota_update, emergency_shutdown]
+                  default: calibrate_sensors
+                  example: calibrate_sensors
+                parameters:
+                  type: object
+                  properties:
+                    targetSensors:
+                      type: array
+                      items:
+                        type: string
+                      example: [thermal_01, pressure_02]
+                    timeoutSeconds:
+                      type: integer
+                      example: 30
+      responses:
+        '200':
+          description: Command successfully acknowledged by gateway
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  commandId:
+                    type: string
+                    example: cmd_act_771923
+                  deviceId:
+                    type: string
+                    example: dev_edge_8012
+                  status:
+                    type: string
+                    example: ACKNOWLEDGED
+                  dispatchedAt:
+                    type: string
+                    example: '2026-09-20T03:35:10Z'
+
+components:
+  securitySchemes:
+    BasicAuth:
+      type: http
+      scheme: basic
+      description: Device identifier and hardware secret
+    DeviceTokenAuth:
+      type: apiKey
+      in: header
+      name: X-Device-Token
+      description: Pre-shared token header for edge gateways
+
+  schemas:
+    TelemetryPayload:
+      type: object
+      required:
+        - deviceId
+        - timestamp
+        - metrics
+      properties:
+        deviceId:
+          type: string
+          example: dev_edge_8012
+        timestamp:
+          type: string
+          example: '2026-09-20T03:34:55Z'
+        batteryPercentage:
+          type: number
+          example: 94.5
+        metrics:
+          type: object
+          properties:
+            temperatureCelsius:
+              type: number
+              example: 41.2
+            vibrationHz:
+              type: number
+              example: 12.8
+            ambientPressureKPa:
+              type: number
+              example: 101.3
+            coolantFlowLitersMin:
+              type: number
+              example: 3.8
+
+    Device:
+      type: object
+      properties:
+        id:
+          type: string
+          example: dev_edge_8012
+        model:
+          type: string
+          example: PulseNode-TX500
+        zone:
+          type: string
+          example: Zone-North-Plant
+        firmwareVersion:
+          type: string
+          example: v3.4.1-rc2
+        status:
+          type: string
+          example: online
+        lastHeartbeat:
+          type: string
+          example: '2026-09-20T03:34:50Z'
+
+    DeviceShadow:
+      type: object
+      properties:
+        deviceId:
+          type: string
+          example: dev_edge_8012
+        version:
+          type: integer
+          example: 142
+        state:
+          type: object
+          properties:
+            desired:
+              type: object
+              properties:
+                samplingRateSeconds:
+                  type: integer
+                  example: 5
+                logLevel:
+                  type: string
+                  example: WARN
+                telemetryEnabled:
+                  type: boolean
+                  example: true
+            reported:
+              type: object
+              properties:
+                samplingRateSeconds:
+                  type: integer
+                  example: 5
+                logLevel:
+                  type: string
+                  example: WARN
+                telemetryEnabled:
+                  type: boolean
+                  example: true
+                batteryHealth:
+                  type: string
+                  example: EXCELLENT
+        lastSyncedAt:
+          type: string
+          example: '2026-09-20T03:30:00Z'

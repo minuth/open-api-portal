@@ -1,16 +1,18 @@
 # Open API Portal
 
-Open API Portal is a centralized platform for exploring, documenting, and interactively testing OpenAPI 3.0 and 3.1 specifications. It features a fast, server-rendered interface with an interactive request playground and native support for JSON Object Signing and Encryption (JOSE) enterprise workflows.
+Open API Portal is a centralized platform for exploring, documenting, and interactively testing OpenAPI 3.0 and 3.1 specifications. It features a fast, server-rendered interface with an interactive request playground, native support for JSON Object Signing and Encryption (JOSE) enterprise workflows, and an embedded mock server with comprehensive real-world industry scenarios.
 
 ---
 
 ## Features
 
-- **Interactive API Playground**: Execute requests directly with dynamic target server selection, path/query parameter inputs, and payload editors. Input controls strictly reflect the OpenAPI specification.
-- **Spec-Enforced Authentication**: Automatic handling of HTTP Bearer, API Key, Basic Auth, OAuth 2.0, and OpenID Connect schemes. Includes a locked standard `Bearer` prefix, spec-wide authorization, and live JWT claims decoding.
-- **Native JOSE Extension (`x-jose-security`)**: Full support for digital signatures (JWS), payload encryption (JWE), field-level encryption (FLE), detached signatures, and nested envelopes directly in OpenAPI documents.
+- **Interactive API Playground**: Execute requests directly with dynamic target server selection, path/query parameter inputs, and payload editors. Input controls strictly reflect the active OpenAPI specification.
+- **Embedded Default Keys for JOSE**: Endpoints with `x-jose-security` can define default cryptographic keys directly in the specification using YAML anchors. Playground users can execute signing and encryption immediately without manually uploading PEM or JWK files.
+- **Spec-Enforced Authentication**: Automatic handling of HTTP Bearer, API Key, Basic Auth, OAuth 2.0, and OpenID Connect schemes with live JWT claims decoding.
+- **Native JOSE Extension (`x-jose-security`)**: Comprehensive declarative support for digital signatures (JWS), payload encryption (JWE), field-level encryption (Pure & Nested FLE), detached signatures, and nested envelopes (`cty: JWT`).
 - **Specification Management & Git Sync**: Store specifications in persistent storage or ephemeral sandbox sessions, with automated sync from GitHub, GitLab, and self-hosted Git repositories.
-- **High-Contrast Dark Theme**: Fast, clean documentation interface with instant tag filtering, search, and response inspectors.
+- **Unified Companion Mock Server**: Embedded mock gateway that validates cryptographic signatures, decrypts JWE payloads, issues tokens, and simulates industry API patterns with zero external dependencies.
+- **High-Contrast Dark Theme**: Fast, clean Linear/Vercel-inspired documentation interface with instant tag filtering, search, and response inspectors.
 
 ---
 
@@ -36,9 +38,25 @@ The portal supports the `x-jose-security` OpenAPI extension, enabling declarativ
 ### Extension Schema Reference
 
 ```yaml
+# Optional: Define reusable keys at root using YAML anchors
+x-default-keys:
+  rsaPrivateKey: &rsaPrivateKey |
+    -----BEGIN PRIVATE KEY-----
+    ...
+    -----END PRIVATE KEY-----
+  rsaPublicKey: &rsaPublicKey |
+    -----BEGIN PUBLIC KEY-----
+    ...
+    -----END PUBLIC KEY-----
+
 x-jose-security:
   enabled: true                  # Set to false to disable JOSE for this operation
   mode: jws | jwe | both         # Cryptographic operation mode
+
+  # Top-level default key shortcuts (optional)
+  defaultKey: *rsaPrivateKey     # Fallback key text for single-key operations
+  defaultSigningKey: *rsaPrivateKey
+  defaultEncryptionKey: *rsaPublicKey
 
   # Signature configuration (mode: jws or both)
   sign:
@@ -58,6 +76,8 @@ x-jose-security:
     digestClaimName: string      # Payload digest claim name (default: digest)
     digestAlgorithm: string      # Digest algorithm: SHA-256 | SHA-384 | SHA-512 (default: SHA-256)
     claims: object               # Static or typed payload claims
+    defaultKey: *rsaPrivateKey   # Embedded default private/secret key text (PEM, JWK, or raw secret)
+    defaultPassphrase: string    # Optional passphrase for encrypted private keys
 
   # Encryption configuration (mode: jwe or both)
   encrypt:
@@ -73,6 +93,7 @@ x-jose-security:
     crit: string[]               # Critical protected headers list
     customHeaders: object        # Additional protected header parameters
     claims: object               # Custom payload claims for encrypted JWTs
+    defaultKey: *rsaPublicKey    # Embedded default recipient public/secret key text (PEM, JWK, or raw secret)
 
   # Digest & verification controls
   computeDigest: boolean         # Generate RFC 3230 Digest header (e.g. Digest: SHA-256=...)
@@ -94,9 +115,19 @@ x-jose-security:
 
 ---
 
+## Interactive Playground Default Keys & Zero-Setup Testing
+
+When testing endpoints with `x-jose-security`:
+1. **Automatic Pre-loading**: If the specification provides `defaultKey`, the playground pre-loads it on page load (`"Default key loaded (from spec)"`).
+2. **Transparent Backend Fallback**: If a user does not select or upload a key, the backend proxy automatically uses the default key defined in the spec.
+3. **One-Click Key Reset**: If a user clears an uploaded key, a **"Use Default Key"** button instantly restores the spec's default key.
+4. **File Upload Precedence**: Users can upload custom `.pem`, `.der`, or `.jwk.json` files at any time; uploaded keys always take precedence over spec defaults.
+
+---
+
 ## Specification Examples
 
-### 1. Detached JWS Signature with RFC 3230 Digest
+### 1. Detached JWS Signature with Default EC Key & RFC 3230 Digest
 
 Used in Open Banking, NextGenPSD2, and UK Open Banking specifications:
 
@@ -117,6 +148,7 @@ paths:
           b64: false
           crit:
             - b64
+          defaultKey: *ecPrivateKey
 ```
 
 ### 2. Compact JWE Payload with Elliptic Curve Key Agreement
@@ -135,17 +167,18 @@ paths:
           enc: A256GCM
           kid: gateway-ec-recipient
           placement: body
+          defaultKey: *ecPublicKey
 ```
 
 ### 3. Field-Level Encryption (Pure FLE)
 
-Encrypts sensitive payload properties into a designated field while keeping the outer payload readable by standard API gateways:
+Encrypts sensitive credit card payload properties into a designated `encData` field:
 
 ```yaml
 paths:
-  /api/v1/checkout/direct-charge:
+  /api/v1/cards/tokenize:
     post:
-      summary: Direct Credit Card Charge
+      summary: Tokenize Payment Card
       x-jose-security:
         mode: jwe
         encrypt:
@@ -154,15 +187,16 @@ paths:
           placement: field
           targetField: encData
           fields:
-            - cardNumber
+            - pan
             - cvv
             - expiryMonth
             - expiryYear
+          defaultKey: *rsaPublicKey
 ```
 
-### 4. Nested JOSE (Sign-Then-Encrypt)
+### 4. Nested JOSE (Sign-Then-Encrypt with Dual Default Keys)
 
-Combines sender authenticity and recipient confidentiality by placing a signed JWS inside an encrypted JWE envelope (`cty: JWT`):
+Combines sender authenticity and recipient confidentiality with dual keys (`cty: JWT`):
 
 ```yaml
 paths:
@@ -174,13 +208,21 @@ paths:
         sign:
           alg: RS256
           kid: partner-signer-2026
+          defaultKey: *rsaPrivateKey
         encrypt:
           alg: RSA-OAEP-256
           enc: A256GCM
           kid: gateway-rsa-recipient
           cty: JWT
           placement: body
+          defaultKey: *rsaPublicKey
 ```
+
+---
+
+## Mock Specifications
+
+Set `ENABLE_MOCK_API=true` in your `.env` to enable the companion mock server and automatically synchronize sample specifications from `./mock-api-spec/` into `./storage/specs/`.
 
 ---
 
@@ -188,8 +230,31 @@ paths:
 
 ### Prerequisites
 
-- **Node.js**: v18.0.0 or higher (or **Bun** v1.0+)
+- **Node.js**: v20.0.0 or higher (or **Bun** v1.0+)
 - **npm**: v9.0.0 or higher
+
+### Configuration (`.env`)
+
+Copy `example.env` to `.env`:
+
+```bash
+cp example.env .env
+```
+
+Key environment variables:
+
+```ini
+PORT=3000
+DATABASE_PATH=./storage/portal.db
+ENCRYPTION_SECRET=open-api-portal-secret-key-2026-secure-32byte!
+
+# Initial Admin Credentials
+INITIAL_ADMIN_USERNAME=admin
+INITIAL_ADMIN_PASSWORD=admin123
+
+# Companion Mock Server (runs on same unified port and auto-syncs mock-api-spec/)
+ENABLE_MOCK_API=true
+```
 
 ### Installation & Run
 
@@ -198,33 +263,12 @@ paths:
    npm install
    ```
 
-2. Initialize database:
-   ```bash
-   npm run db:push
-   ```
-
-3. Start the application:
+2. Start the development server (with mock server enabled):
    ```bash
    npm run dev
    ```
 
-4. Open [http://localhost:3000](http://localhost:3000). Default credentials: `admin` / `admin123`.
-
----
-
-## Mock Gateway & Testing
-
-To run the companion mock gateway supporting all 16 JOSE cryptographic flows:
-
-```bash
-npm run mock
-```
-
-To run the automated cryptographic verification suite:
-
-```bash
-npm run mock:test
-```
+3. Open [http://localhost:3000](http://localhost:3000). Default credentials: `admin` / `admin123`.
 
 ---
 

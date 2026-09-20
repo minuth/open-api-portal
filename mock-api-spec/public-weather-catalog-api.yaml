@@ -1,0 +1,451 @@
+openapi: 3.0.3
+info:
+  title: OpenWorld Public Weather & City Catalog API
+  version: 1.2.0
+  description: |
+    A completely public, zero-authentication API providing real-time weather forecasts,
+    city geo-location lookup, public event listings, and platform health telemetry.
+    
+    ### Key Highlights:
+    - **Zero Authentication**: Open access for developers and public dashboards.
+    - **Flexible Query Filtering**: Full support for pagination (`page`, `limit`), sorting, and geolocation coordinates (`lat`, `lon`).
+    - **Rich Observability**: Live status, system uptime, and incident reports.
+  contact:
+    name: OpenWorld Public Data Initiative
+    email: open-data@openworld.example
+servers:
+  - url: http://localhost:3000
+    description: Primary Unified Portal Server
+
+tags:
+  - name: Weather & Forecasts
+    description: Public meteorological readings, UV indices, and 5-day weather predictions
+  - name: Cities & Geocoding
+    description: Global city directory, coordinates, timezones, and population lookup
+  - name: Public Events
+    description: Community events, exhibitions, and public municipal notices
+  - name: Platform Health
+    description: Live uptime metrics and public subsystem availability
+
+paths:
+  # =========================================================================
+  # Weather Endpoints
+  # =========================================================================
+  /api/public/weather/current:
+    get:
+      tags:
+        - Weather & Forecasts
+      summary: Get Current Weather
+      description: Returns real-time ambient conditions by city name or geographic coordinates.
+      operationId: getCurrentWeather
+      parameters:
+        - name: city
+          in: query
+          description: Name of the city (e.g., Tokyo, London, Paris)
+          required: false
+          schema:
+            type: string
+            default: Tokyo
+            example: Tokyo
+        - name: units
+          in: query
+          description: Measurement units format
+          required: false
+          schema:
+            type: string
+            enum: [metric, imperial]
+            default: metric
+        - name: lat
+          in: query
+          description: Latitude coordinate
+          required: false
+          schema:
+            type: number
+            example: 35.6762
+        - name: lon
+          in: query
+          description: Longitude coordinate
+          required: false
+          schema:
+            type: number
+            example: 139.6503
+      responses:
+        '200':
+          description: Current weather conditions returned successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentWeather'
+        '400':
+          description: Invalid city or coordinates parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/public/weather/forecast:
+    get:
+      tags:
+        - Weather & Forecasts
+      summary: Get 5-Day Weather Forecast
+      description: Returns multi-day daily weather projections and precipitation probabilities.
+      operationId: getWeatherForecast
+      parameters:
+        - name: city
+          in: query
+          description: City name
+          required: false
+          schema:
+            type: string
+            default: Tokyo
+        - name: days
+          in: query
+          description: Forecast lookahead horizon (1 to 7 days)
+          required: false
+          schema:
+            type: integer
+            default: 5
+            minimum: 1
+            maximum: 7
+      responses:
+        '200':
+          description: Multi-day forecast list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  city:
+                    type: string
+                    example: Tokyo
+                  country:
+                    type: string
+                    example: Japan
+                  daysCount:
+                    type: integer
+                    example: 5
+                  forecasts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ForecastDay'
+
+  # =========================================================================
+  # Cities & Geocoding Endpoints
+  # =========================================================================
+  /api/public/cities:
+    get:
+      tags:
+        - Cities & Geocoding
+      summary: Search and List Cities
+      description: Paginated search through the global municipal directory with region and population filtering.
+      operationId: listCities
+      parameters:
+        - name: search
+          in: query
+          description: Name prefix or fuzzy text search
+          required: false
+          schema:
+            type: string
+            example: San
+        - name: country
+          in: query
+          description: ISO 3166-1 alpha-2 country code
+          required: false
+          schema:
+            type: string
+            example: US
+        - name: page
+          in: query
+          description: Page index number (1-based)
+          required: false
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          description: Number of records per page
+          required: false
+          schema:
+            type: integer
+            default: 10
+            maximum: 50
+      responses:
+        '200':
+          description: Paginated city results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  page:
+                    type: integer
+                    example: 1
+                  limit:
+                    type: integer
+                    example: 10
+                  total:
+                    type: integer
+                    example: 1420
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/City'
+
+  /api/public/cities/{cityId}:
+    get:
+      tags:
+        - Cities & Geocoding
+      summary: Get City Detail by ID
+      description: Fetches full municipal metadata including elevation, timezone, and historical facts.
+      operationId: getCityById
+      parameters:
+        - name: cityId
+          in: path
+          required: true
+          description: Unique city identifier slug or code
+          schema:
+            type: string
+            default: tokyo-jp
+            example: tokyo-jp
+      responses:
+        '200':
+          description: City details found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CityDetail'
+        '404':
+          description: City ID not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  # =========================================================================
+  # Public Events
+  # =========================================================================
+  /api/public/events:
+    get:
+      tags:
+        - Public Events
+      summary: List Public Events
+      description: Returns upcoming public exhibitions, festivals, and community gatherings.
+      operationId: listPublicEvents
+      parameters:
+        - name: category
+          in: query
+          description: Event topic filter
+          required: false
+          schema:
+            type: string
+            enum: [all, culture, technology, sports, music]
+            default: all
+        - name: freeOnly
+          in: query
+          description: Only return non-ticketed free admission events
+          required: false
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Active public events list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                    example: 3
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PublicEvent'
+
+  # =========================================================================
+  # Health & Status
+  # =========================================================================
+  /api/public/status:
+    get:
+      tags:
+        - Platform Health
+      summary: Public System Status & Telemetry
+      description: Uptime status, latency benchmarks, and active public data sync cycles.
+      operationId: getPublicStatus
+      responses:
+        '200':
+          description: System operational report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: OPERATIONAL
+                  uptimePercentage:
+                    type: number
+                    example: 99.98
+                  activeStations:
+                    type: integer
+                    example: 18450
+                  lastUpdated:
+                    type: string
+                    example: '2026-09-20T10:00:00Z'
+
+components:
+  schemas:
+    CurrentWeather:
+      type: object
+      properties:
+        city:
+          type: string
+          example: Tokyo
+        country:
+          type: string
+          example: Japan
+        coordinates:
+          type: object
+          properties:
+            lat:
+              type: number
+              example: 35.6762
+            lon:
+              type: number
+              example: 139.6503
+        temperature:
+          type: number
+          example: 22.4
+        feelsLike:
+          type: number
+          example: 21.8
+        condition:
+          type: string
+          example: Partly Cloudy
+        humidity:
+          type: integer
+          example: 58
+        windSpeedKmh:
+          type: number
+          example: 14.2
+        uvIndex:
+          type: integer
+          example: 4
+        recordedAt:
+          type: string
+          example: '2026-09-20T03:30:00Z'
+
+    ForecastDay:
+      type: object
+      properties:
+        date:
+          type: string
+          example: '2026-09-21'
+        dayOfWeek:
+          type: string
+          example: Monday
+        tempMin:
+          type: number
+          example: 18.0
+        tempMax:
+          type: number
+          example: 25.5
+        condition:
+          type: string
+          example: Sunny
+        rainProbability:
+          type: integer
+          example: 10
+
+    City:
+      type: object
+      properties:
+        id:
+          type: string
+          example: tokyo-jp
+        name:
+          type: string
+          example: Tokyo
+        country:
+          type: string
+          example: Japan
+        population:
+          type: integer
+          example: 13960000
+        timezone:
+          type: string
+          example: Asia/Tokyo
+
+    CityDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          example: tokyo-jp
+        name:
+          type: string
+          example: Tokyo
+        country:
+          type: string
+          example: Japan
+        countryCode:
+          type: string
+          example: JP
+        coordinates:
+          type: object
+          properties:
+            lat:
+              type: number
+              example: 35.6762
+            lon:
+              type: number
+              example: 139.6503
+        elevationMeters:
+          type: integer
+          example: 40
+        population:
+          type: integer
+          example: 13960000
+        timezone:
+          type: string
+          example: Asia/Tokyo
+        description:
+          type: string
+          example: Capital of Japan and the world's most populous metropolitan area.
+
+    PublicEvent:
+      type: object
+      properties:
+        id:
+          type: string
+          example: evt_88192
+        title:
+          type: string
+          example: Global Open Source & Data Summit 2026
+        category:
+          type: string
+          example: technology
+        venue:
+          type: string
+          example: Tokyo International Forum
+        date:
+          type: string
+          example: '2026-10-15'
+        isFree:
+          type: boolean
+          example: true
+
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: NOT_FOUND
+        message:
+          type: string
+          example: The requested municipal resource was not found.
+        timestamp:
+          type: string
+          example: '2026-09-20T03:30:00Z'

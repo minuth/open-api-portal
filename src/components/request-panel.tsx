@@ -612,6 +612,11 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
   const joseConfig = endpoint.joseSecurity
   const defaultKid = joseConfig?.sign?.kid || joseConfig?.encrypt?.kid || ''
 
+  const defaultSignKey = joseConfig?.sign?.defaultKey || joseConfig?.defaultSigningKey || joseConfig?.defaultKey || ''
+  const defaultSignPassphrase = joseConfig?.sign?.defaultPassphrase || ''
+  const defaultEncKey = joseConfig?.encrypt?.defaultKey || joseConfig?.defaultEncryptionKey || (joseConfig?.mode === 'jwe' ? joseConfig?.defaultKey : '') || ''
+  const defaultSingleKey = (joseConfig?.mode === 'jws' ? defaultSignKey : defaultEncKey) || joseConfig?.defaultKey || ''
+
   const sigDesc = joseConfig?.sign ? describeSignatureAlgorithm(joseConfig.sign.alg) : null
   const encDesc = joseConfig?.encrypt ? describeEncryptionAlgorithm(joseConfig.encrypt.alg) : null
   const cipherDesc = joseConfig?.encrypt ? describeContentCipher(joseConfig.encrypt.enc) : null
@@ -863,26 +868,29 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
     joseSecurityJson: joseConfig ? JSON.stringify(joseConfig) : '',
     expectedSignFamily: sigDesc?.family || 'other',
     expectedEncFamily: encDesc?.family || 'other',
-    joseKeyContent: '',
-    joseKeyName: '',
+    defaultKeyText: defaultSingleKey,
+    defaultSignKeyText: defaultSignKey,
+    defaultEncKeyText: defaultEncKey,
+    joseKeyContent: defaultSingleKey,
+    joseKeyName: defaultSingleKey ? 'Default Spec Key' : '',
     joseKid: defaultKid,
-    josePassphrase: '',
-    joseKeyStatus: 'No key loaded',
+    josePassphrase: defaultSignPassphrase,
+    joseKeyStatus: defaultSingleKey ? 'Default key loaded (from spec)' : 'No key loaded',
     joseKeyInspector: null,
-    joseKeyCompat: { valid: true, msg: 'No key loaded' },
-    joseSigningKeyContent: '',
-    joseSigningKeyName: '',
+    joseKeyCompat: { valid: true, msg: defaultSingleKey ? 'Default key from specification' : 'No key loaded' },
+    joseSigningKeyContent: defaultSignKey,
+    joseSigningKeyName: defaultSignKey ? 'Default Spec Signing Key' : '',
     joseSigningKid: defaultSignKid,
-    joseSigningPassphrase: '',
-    joseSigningKeyStatus: 'No signing key loaded',
+    joseSigningPassphrase: defaultSignPassphrase,
+    joseSigningKeyStatus: defaultSignKey ? 'Default signing key loaded' : 'No signing key loaded',
     joseSigningKeyInspector: null,
-    joseSigningKeyCompat: { valid: true, msg: 'No signing key loaded' },
-    joseEncryptionKeyContent: '',
-    joseEncryptionKeyName: '',
+    joseSigningKeyCompat: { valid: true, msg: defaultSignKey ? 'Default signing key from specification' : 'No signing key loaded' },
+    joseEncryptionKeyContent: defaultEncKey,
+    joseEncryptionKeyName: defaultEncKey ? 'Default Spec Encryption Key' : '',
     joseEncryptionKid: defaultEncKid,
-    joseEncryptionKeyStatus: 'No encryption key loaded',
+    joseEncryptionKeyStatus: defaultEncKey ? 'Default encryption key loaded' : 'No encryption key loaded',
     joseEncryptionKeyInspector: null,
-    joseEncryptionKeyCompat: { valid: true, msg: 'No encryption key loaded' },
+    joseEncryptionKeyCompat: { valid: true, msg: defaultEncKey ? 'Default encryption key from specification' : 'No encryption key loaded' },
     specId: spec.id,
     endpointSchemes: securityInfo.schemes,
     auth: {
@@ -1741,9 +1749,20 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
                       </template>
 
                       <template x-if="!joseSigningKeyContent">
-                        <span class="text-subtle">
-                          Supports PEM, JWK, or DER
-                        </span>
+                        <div class="jose-no-key-row">
+                          <span class="text-subtle">
+                            Supports PEM, JWK, or DER
+                          </span>
+                          <template x-if="defaultSignKeyText">
+                            <button
+                              type="button"
+                              class="btn btn-ghost btn-xs"
+                              x-on:click="joseSigningKeyContent = defaultSignKeyText; joseSigningKeyName = 'Default Spec Key'; joseSigningKeyStatus = 'Default signing key loaded'; joseSigningKeyCompat = { valid: true, msg: 'Default key from specification' }"
+                            >
+                              Use Default Key
+                            </button>
+                          </template>
+                        </div>
                       </template>
                     </div>
 
@@ -1869,9 +1888,20 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
                       </template>
 
                       <template x-if="!joseEncryptionKeyContent">
-                        <span class="text-subtle">
-                          Supports PEM, JWK, or DER
-                        </span>
+                        <div class="jose-no-key-row">
+                          <span class="text-subtle">
+                            Supports PEM, JWK, or DER
+                          </span>
+                          <template x-if="defaultEncKeyText">
+                            <button
+                              type="button"
+                              class="btn btn-ghost btn-xs"
+                              x-on:click="joseEncryptionKeyContent = defaultEncKeyText; joseEncryptionKeyName = 'Default Spec Key'; joseEncryptionKeyStatus = 'Default encryption key loaded'; joseEncryptionKeyCompat = { valid: true, msg: 'Default key from specification' }"
+                            >
+                              Use Default Key
+                            </button>
+                          </template>
+                        </div>
                       </template>
                     </div>
 
@@ -2008,9 +2038,20 @@ export const RequestPanel = ({ spec, endpoint }: RequestPanelProps) => {
                     </template>
 
                     <template x-if="!joseKeyContent">
-                      <span class="text-subtle">
-                        Supports PEM, JWK, or DER
-                      </span>
+                      <div class="jose-no-key-row">
+                        <span class="text-subtle">
+                          Supports PEM, JWK, or DER
+                        </span>
+                        <template x-if="defaultKeyText">
+                          <button
+                            type="button"
+                            class="btn btn-ghost btn-xs"
+                            x-on:click="joseKeyContent = defaultKeyText; joseKeyName = 'Default Spec Key'; joseKeyStatus = 'Default key loaded'; joseKeyCompat = { valid: true, msg: 'Default key from specification' }"
+                          >
+                            Use Default Key
+                          </button>
+                        </template>
+                      </div>
                     </template>
                   </div>
 

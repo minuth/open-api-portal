@@ -1,0 +1,539 @@
+openapi: 3.0.3
+info:
+  title: CloudStore E-Commerce & Retail SaaS API
+  version: 2.4.0
+  description: |
+    Enterprise-grade e-commerce backend API for multi-channel product catalog management,
+    customer order fulfillment, dynamic inventory tracking, and warehouse dispatching.
+
+    ### Authentication:
+    - Authenticate using an API Key header: `X-API-KEY: cld_live_token_7789`
+    - Or via standard Bearer Token: `Authorization: Bearer <access_token>`
+  contact:
+    name: CloudStore Merchant Developer Services
+    email: api-support@cloudstore.example
+servers:
+  - url: http://localhost:3000
+    description: Primary Unified Portal Server
+
+security:
+  - ApiKeyAuth: []
+  - BearerAuth: []
+
+tags:
+  - name: Products Catalog
+    description: Catalog items, SKUs, pricing variants, and categorization
+  - name: Orders & Checkout
+    description: Purchase order lifecycle, checkout sessions, and status updates
+  - name: Customers
+    description: Merchant customer profiles and addresses
+  - name: Inventory
+    description: Warehouse stock levels and restocking reservations
+
+paths:
+  # =========================================================================
+  # Products Catalog Endpoints
+  # =========================================================================
+  /api/v2/products:
+    get:
+      tags:
+        - Products Catalog
+      summary: List Products
+      description: Retrieve catalog products with multi-attribute filtering and pagination.
+      operationId: listProducts
+      parameters:
+        - name: category
+          in: query
+          description: Filter by category slug
+          required: false
+          schema:
+            type: string
+            enum: [electronics, apparel, home, books]
+            default: electronics
+        - name: minPrice
+          in: query
+          description: Minimum item price
+          required: false
+          schema:
+            type: number
+            example: 50.00
+        - name: maxPrice
+          in: query
+          description: Maximum item price
+          required: false
+          schema:
+            type: number
+            example: 1000.00
+        - name: inStockOnly
+          in: query
+          description: Filter items currently in inventory
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: limit
+          in: query
+          description: Max items to return
+          required: false
+          schema:
+            type: integer
+            default: 10
+            maximum: 100
+      responses:
+        '200':
+          description: Products retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                    example: 48
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Product'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+    post:
+      tags:
+        - Products Catalog
+      summary: Create New Product
+      description: Creates a new SKU entry in the merchant store catalog.
+      operationId: createProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductInput'
+      responses:
+        '201':
+          description: Product successfully created
+          headers:
+            Location:
+              schema:
+                type: string
+                example: /api/v2/products/prod_88219
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /api/v2/products/{productId}:
+    get:
+      tags:
+        - Products Catalog
+      summary: Get Product by ID
+      description: Returns product details, images, variants, and real-time inventory count.
+      operationId: getProductById
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          description: Unique product identifier
+          schema:
+            type: string
+            default: prod_88219
+            example: prod_88219
+      responses:
+        '200':
+          description: Product retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          description: Product ID not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - Products Catalog
+      summary: Update Product
+      description: Modifies pricing, metadata, or inventory quantities of an existing product.
+      operationId: updateProduct
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            default: prod_88219
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductInput'
+      responses:
+        '200':
+          description: Product updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          description: Product not found
+
+    delete:
+      tags:
+        - Products Catalog
+      summary: Delete Product
+      description: Soft-deletes or archives a product from the active store catalog.
+      operationId: deleteProduct
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            default: prod_88219
+      responses:
+        '200':
+          description: Product successfully removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+                    example: true
+                  productId:
+                    type: string
+                    example: prod_88219
+
+  # =========================================================================
+  # Orders Endpoints
+  # =========================================================================
+  /api/v2/orders:
+    get:
+      tags:
+        - Orders & Checkout
+      summary: List Orders
+      description: Search merchant orders filtered by fulfillment status, customer, or date range.
+      operationId: listOrders
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [all, pending, processing, shipped, delivered, cancelled]
+            default: processing
+        - name: customerId
+          in: query
+          required: false
+          schema:
+            type: string
+            example: cust_9941
+      responses:
+        '200':
+          description: Orders list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                    example: 2
+                  orders:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Order'
+
+    post:
+      tags:
+        - Orders & Checkout
+      summary: Place New Order
+      description: Validates stock availability, creates an order, and calculates tax & shipping totals.
+      operationId: createOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderInput'
+      responses:
+        '201':
+          description: Order placed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+
+  /api/v2/orders/{orderId}:
+    get:
+      tags:
+        - Orders & Checkout
+      summary: Get Order Detail
+      description: Retrieve complete line items, tracking number, and customer invoice.
+      operationId: getOrderById
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            default: ord_771923
+            example: ord_771923
+      responses:
+        '200':
+          description: Order details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+
+  # =========================================================================
+  # Inventory Endpoints
+  # =========================================================================
+  /api/v2/inventory/{sku}:
+    get:
+      tags:
+        - Inventory
+      summary: Check Stock Levels
+      description: Real-time available, reserved, and incoming inventory counts across fulfillment centers.
+      operationId: getInventoryBySku
+      parameters:
+        - name: sku
+          in: path
+          required: true
+          schema:
+            type: string
+            default: SKU-NOISE-CANCEL-PRO
+            example: SKU-NOISE-CANCEL-PRO
+      responses:
+        '200':
+          description: Stock metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryStock'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-KEY
+      description: Institutional API key format (e.g. `cld_live_token_7789`)
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Standard OAuth2 / OIDC access token
+
+  responses:
+    UnauthorizedError:
+      description: Missing or invalid API Key or Bearer token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationError:
+      description: Invalid request payload or parameter format
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+          example: prod_88219
+        title:
+          type: string
+          example: Wireless Noise-Cancelling Pro Headphones
+        sku:
+          type: string
+          example: SKU-NOISE-CANCEL-PRO
+        category:
+          type: string
+          example: electronics
+        price:
+          type: number
+          example: 249.99
+        currency:
+          type: string
+          example: USD
+        stockQuantity:
+          type: integer
+          example: 142
+        rating:
+          type: number
+          example: 4.8
+        createdAt:
+          type: string
+          example: '2026-08-10T14:20:00Z'
+
+    CreateProductInput:
+      type: object
+      required:
+        - title
+        - sku
+        - price
+        - category
+      properties:
+        title:
+          type: string
+          example: Ergonomic Mechanical Keyboard
+        sku:
+          type: string
+          example: SKU-MECH-KEY-RGB
+        category:
+          type: string
+          example: electronics
+        price:
+          type: number
+          example: 129.50
+        currency:
+          type: string
+          default: USD
+          example: USD
+        stockQuantity:
+          type: integer
+          default: 50
+          example: 100
+
+    UpdateProductInput:
+      type: object
+      properties:
+        title:
+          type: string
+          example: Wireless Noise-Cancelling Pro Headphones (Gen 2)
+        price:
+          type: number
+          example: 229.99
+        stockQuantity:
+          type: integer
+          example: 180
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+          example: ord_771923
+        customerId:
+          type: string
+          example: cust_9941
+        status:
+          type: string
+          example: processing
+        totalAmount:
+          type: number
+          example: 289.49
+        currency:
+          type: string
+          example: USD
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              productId:
+                type: string
+                example: prod_88219
+              quantity:
+                type: integer
+                example: 1
+              unitPrice:
+                type: number
+                example: 249.99
+        shippingAddress:
+          type: object
+          properties:
+            street:
+              type: string
+              example: 742 Evergreen Terrace
+            city:
+              type: string
+              example: Springfield
+            zip:
+              type: string
+              example: '97477'
+            country:
+              type: string
+              example: US
+        trackingNumber:
+          type: string
+          example: TRK-FEDEX-99881234
+        createdAt:
+          type: string
+          example: '2026-09-18T09:12:00Z'
+
+    CreateOrderInput:
+      type: object
+      required:
+        - customerId
+        - items
+      properties:
+        customerId:
+          type: string
+          example: cust_9941
+        items:
+          type: array
+          items:
+            type: object
+            required:
+              - productId
+              - quantity
+            properties:
+              productId:
+                type: string
+                example: prod_88219
+              quantity:
+                type: integer
+                default: 1
+                example: 1
+        shippingMethod:
+          type: string
+          enum: [standard, express, overnight]
+          default: express
+
+    InventoryStock:
+      type: object
+      properties:
+        sku:
+          type: string
+          example: SKU-NOISE-CANCEL-PRO
+        available:
+          type: integer
+          example: 142
+        reserved:
+          type: integer
+          example: 18
+        incoming:
+          type: integer
+          example: 50
+        warehouseLocation:
+          type: string
+          example: WH-NORTH-BAY-A12
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: UNAUTHORIZED
+        message:
+          type: string
+          example: Valid API Key in X-API-KEY or Bearer token required.
+        code:
+          type: integer
+          example: 401

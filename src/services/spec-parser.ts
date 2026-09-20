@@ -522,7 +522,9 @@ export class SpecParserService implements ISpecParser {
             ...(typeof rawSign.claims === 'object' && rawSign.claims !== null ? (rawSign.claims as Record<string, unknown>) : {})
           }
           return Object.keys(merged).length > 0 ? merged : undefined
-        })()
+        })(),
+        defaultKey: typeof rawSign.defaultKey === 'string' ? rawSign.defaultKey : (typeof rawSign.defaultKeyContent === 'string' ? rawSign.defaultKeyContent : (typeof obj.defaultSigningKey === 'string' ? obj.defaultSigningKey : (typeof obj.defaultKey === 'string' ? obj.defaultKey : undefined))),
+        defaultPassphrase: typeof rawSign.defaultPassphrase === 'string' ? rawSign.defaultPassphrase : (typeof rawSign.passphrase === 'string' ? rawSign.passphrase : (typeof obj.defaultPassphrase === 'string' ? obj.defaultPassphrase : undefined))
       }
     } else if (typeof obj.alg === 'string' && !obj.encrypt) {
       // Shorthand x-jose-security: { alg: "RS256", kid: "..." }
@@ -541,7 +543,9 @@ export class SpecParserService implements ISpecParser {
         digestInPayload: Boolean(obj.digestInPayload),
         digestClaimName: typeof obj.digestClaimName === 'string' ? obj.digestClaimName : undefined,
         digestAlgorithm: obj.digestAlgorithm === 'SHA-512' || obj.digestAlgorithm === 'SHA-384' ? obj.digestAlgorithm : 'SHA-256',
-        claims: typeof obj.claims === 'object' && obj.claims !== null ? (obj.claims as Record<string, unknown>) : undefined
+        claims: typeof obj.claims === 'object' && obj.claims !== null ? (obj.claims as Record<string, unknown>) : undefined,
+        defaultKey: typeof obj.defaultSigningKey === 'string' ? obj.defaultSigningKey : (typeof obj.defaultKey === 'string' ? obj.defaultKey : undefined),
+        defaultPassphrase: typeof obj.defaultPassphrase === 'string' ? obj.defaultPassphrase : (typeof obj.passphrase === 'string' ? obj.passphrase : undefined)
       }
     }
 
@@ -578,7 +582,8 @@ export class SpecParserService implements ISpecParser {
           : undefined,
         claims: typeof rawEncrypt.claims === 'object' && rawEncrypt.claims !== null
           ? (rawEncrypt.claims as Record<string, unknown>)
-          : undefined
+          : undefined,
+        defaultKey: typeof rawEncrypt.defaultKey === 'string' ? rawEncrypt.defaultKey : (typeof rawEncrypt.defaultKeyContent === 'string' ? rawEncrypt.defaultKeyContent : (typeof obj.defaultEncryptionKey === 'string' ? obj.defaultEncryptionKey : (obj.mode === 'jwe' && typeof obj.defaultKey === 'string' ? obj.defaultKey : undefined)))
       }
     }
 
@@ -620,7 +625,10 @@ export class SpecParserService implements ISpecParser {
       claims: signConfig?.claims || (typeof obj.claims === 'object' && obj.claims !== null ? (obj.claims as Record<string, unknown>) : undefined),
       jwksUri: typeof obj.jwksUri === 'string' ? obj.jwksUri : undefined,
       verifyResponse: Boolean(obj.verifyResponse),
-      decryptResponse: Boolean(obj.decryptResponse)
+      decryptResponse: Boolean(obj.decryptResponse),
+      defaultKey: typeof obj.defaultKey === 'string' ? obj.defaultKey : undefined,
+      defaultSigningKey: typeof obj.defaultSigningKey === 'string' ? obj.defaultSigningKey : signConfig?.defaultKey,
+      defaultEncryptionKey: typeof obj.defaultEncryptionKey === 'string' ? obj.defaultEncryptionKey : encryptConfig?.defaultKey
     }
   }
 

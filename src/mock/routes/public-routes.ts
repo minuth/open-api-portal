@@ -6,7 +6,7 @@ import {
   verifyAttachedJws,
   verifyDigestHeader,
   JoseValidationError
-} from '../middleware/jose-validator'
+} from '../jose-validator'
 
 export function createPublicRoutes(keys: LoadedKeys): Hono {
   const router = new Hono()
@@ -68,7 +68,7 @@ export function createPublicRoutes(keys: LoadedKeys): Hono {
     })
   })
 
-  // 16. GET /api/v1/health (Standard Public)
+  // 16. GET /api/v1/health (Standard Public Mock Health)
   router.get('/api/v1/health', (c) => {
     return c.json({
       status: 'pass',

@@ -5312,3 +5312,9 @@ input:-webkit-autofill:active {
   text-align: center;
 }
 
+.jose-no-key-row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+

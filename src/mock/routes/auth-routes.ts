@@ -2,7 +2,7 @@ import crypto from 'node:crypto'
 import { Hono } from 'hono'
 import * as jose from 'jose'
 import { LoadedKeys } from '../keys'
-import { JoseValidationError } from '../middleware/jose-validator'
+import { JoseValidationError } from '../jose-validator'
 
 export function createAuthRoutes(keys: LoadedKeys): Hono {
   const router = new Hono()

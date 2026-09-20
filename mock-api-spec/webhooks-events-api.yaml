@@ -1,0 +1,285 @@
+openapi: 3.0.3
+info:
+  title: RelayGrid Webhook Subscriptions & Event Bus API
+  version: 1.8.0
+  description: |
+    Enterprise event delivery platform for asynchronous webhooks, HMAC-SHA256 signature
+    verification, automated exponential backoff retries, and delivery audit logs.
+
+    ### Authentication:
+    - Include your Bearer token in the `Authorization` header:
+      `Authorization: Bearer rlg_sec_live_994182`
+    - Outgoing webhooks are signed using HMAC-SHA256 in the `X-Hub-Signature-256` header.
+  contact:
+    name: RelayGrid Platform Architecture
+    email: webhooks@relaygrid.example
+servers:
+  - url: http://localhost:3000
+    description: Primary Unified Portal Server
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Subscriptions
+    description: Webhook endpoint registration, secret keys, and event filters
+  - name: Event Testing
+    description: Interactive ping dispatching and listener signature verification
+  - name: Delivery Logs
+    description: Historic delivery audit trail, HTTP response codes, and retry attempts
+
+paths:
+  # =========================================================================
+  # Subscriptions
+  # =========================================================================
+  /api/v1/webhooks/subscriptions:
+    get:
+      tags:
+        - Subscriptions
+      summary: List Webhook Subscriptions
+      description: Returns all configured webhook target destinations and their enabled event types.
+      operationId: listSubscriptions
+      responses:
+        '200':
+          description: Subscriptions list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                    example: 2
+                  subscriptions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WebhookSubscription'
+
+    post:
+      tags:
+        - Subscriptions
+      summary: Create Webhook Subscription
+      description: Registers a new HTTP POST callback URL to receive signed platform event envelopes.
+      operationId: createSubscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSubscriptionInput'
+      responses:
+        '201':
+          description: Webhook endpoint registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookSubscription'
+        '400':
+          description: Invalid URL or missing required fields
+
+  /api/v1/webhooks/subscriptions/{subscriptionId}:
+    delete:
+      tags:
+        - Subscriptions
+      summary: Delete Webhook Subscription
+      description: Immediately stops sending webhook events to this target endpoint.
+      operationId: deleteSubscription
+      parameters:
+        - name: subscriptionId
+          in: path
+          required: true
+          schema:
+            type: string
+            default: sub_wh_88192
+            example: sub_wh_88192
+      responses:
+        '200':
+          description: Subscription cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+                    example: true
+                  subscriptionId:
+                    type: string
+                    example: sub_wh_88192
+
+  # =========================================================================
+  # Event Testing & Verification
+  # =========================================================================
+  /api/v1/webhooks/test-ping:
+    post:
+      tags:
+        - Event Testing
+      summary: Trigger Test Webhook Ping
+      description: |
+        Dispatches a sample ping payload signed with HMAC-SHA256 to test your receiver's
+        signature verification routine.
+      operationId: testWebhookPing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - targetUrl
+              properties:
+                targetUrl:
+                  type: string
+                  format: uri
+                  default: https://webhook.site/sample-receiver
+                  example: https://webhook.site/sample-receiver
+                secret:
+                  type: string
+                  default: whsec_demo_secret_2026
+                  example: whsec_demo_secret_2026
+                eventType:
+                  type: string
+                  enum: [ping, order.created, payment.succeeded, user.signup]
+                  default: payment.succeeded
+                  example: payment.succeeded
+      responses:
+        '200':
+          description: Webhook ping dispatch result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  delivered:
+                    type: boolean
+                    example: true
+                  targetUrl:
+                    type: string
+                    example: https://webhook.site/sample-receiver
+                  generatedSignature:
+                    type: string
+                    example: sha256=9b244d2d6c17e33dc777324aaecba768d6179427b3fa6fe243f7736611ef4f46
+                  httpStatusReceived:
+                    type: integer
+                    example: 200
+                  roundTripLatencyMs:
+                    type: integer
+                    example: 134
+
+  # =========================================================================
+  # Delivery Audit Logs
+  # =========================================================================
+  /api/v1/webhooks/deliveries:
+    get:
+      tags:
+        - Delivery Logs
+      summary: View Delivery Logs
+      description: Returns recent webhook delivery attempts, HTTP status codes, and execution latency.
+      operationId: listDeliveries
+      parameters:
+        - name: eventType
+          in: query
+          schema:
+            type: string
+            example: payment.succeeded
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [all, success, failed]
+            default: all
+      responses:
+        '200':
+          description: Webhook delivery attempt logs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                    example: 3
+                  deliveries:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DeliveryLog'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Token
+      description: Standard API access token
+
+  schemas:
+    WebhookSubscription:
+      type: object
+      properties:
+        id:
+          type: string
+          example: sub_wh_88192
+        url:
+          type: string
+          example: https://api.partner.example/webhooks/relaygrid
+        events:
+          type: array
+          items:
+            type: string
+          example: [payment.succeeded, order.fulfilled]
+        signingSecretPrefix:
+          type: string
+          example: whsec_9941...
+        status:
+          type: string
+          example: ACTIVE
+        createdAt:
+          type: string
+          example: '2026-08-01T10:00:00Z'
+
+    CreateSubscriptionInput:
+      type: object
+      required:
+        - url
+        - events
+      properties:
+        url:
+          type: string
+          format: uri
+          example: https://api.partner.example/webhooks/relaygrid
+        events:
+          type: array
+          items:
+            type: string
+          example: [payment.succeeded, order.fulfilled]
+        description:
+          type: string
+          example: Primary production payment notification receiver
+
+    DeliveryLog:
+      type: object
+      properties:
+        id:
+          type: string
+          example: del_88192a
+        subscriptionId:
+          type: string
+          example: sub_wh_88192
+        eventType:
+          type: string
+          example: payment.succeeded
+        payloadId:
+          type: string
+          example: evt_pay_7721
+        responseStatusCode:
+          type: integer
+          example: 200
+        latencyMs:
+          type: integer
+          example: 84
+        timestamp:
+          type: string
+          example: '2026-09-20T03:32:00Z'
+        attemptNumber:
+          type: integer
+          example: 1
