@@ -1,0 +1,11 @@
+node_modules
+dist
+storage/*.db
+storage/*.db-journal
+storage/*.db-shm
+storage/*.db-wal
+.git
+.env
+.agents
+scratch
+*.log

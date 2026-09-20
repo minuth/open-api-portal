@@ -127,10 +127,12 @@ if (enableMockApi) {
   console.log(`[Mock Server] Disabled (set ENABLE_MOCK_API=true to enable)`)
 }
 
-console.log(`Open API Portal server running on http://localhost:${port}`)
+const host = process.env.HOST || '0.0.0.0'
+console.log(`Open API Portal server running on http://${host}:${port}`)
 
 serve({
   fetch: app.fetch,
-  port
+  port,
+  hostname: host
 })
 

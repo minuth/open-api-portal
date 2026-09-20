@@ -7,8 +7,8 @@
   "scripts": {
     "dev": "tsx watch --env-file-if-exists=.env src/index.tsx",
     "dev:mock": "tsx watch --env-file-if-exists=.env src/index.tsx",
-    "build": "tsc",
-    "start": "node --env-file-if-exists=.env dist/index.js",
+    "build": "tsc --noEmit",
+    "start": "tsx src/index.tsx",
     "db:generate": "drizzle-kit generate",
     "test:mock": "tsx --env-file-if-exists=.env test/mock-api-test.ts"
   },
@@ -19,14 +19,14 @@
     "hono": "^4.13.1",
     "jose": "^6.2.10",
     "js-yaml": "^5.2.3",
-    "marked": "^18.0.12"
+    "marked": "^18.0.12",
+    "tsx": "^4.23.12"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^26.2.0",
     "drizzle-kit": "^0.31.10",
-    "tsx": "^4.23.12",
     "typescript": "^7.0.2"
   },
   "overrides": {

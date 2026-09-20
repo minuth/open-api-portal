@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: open-api-portal
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: DATABASE_PATH
+        value: ./storage/portal.db
+      - key: ENCRYPTION_SECRET
+        generateValue: true
+      - key: ENABLE_MOCK_API
+        value: "true"
+      - key: INITIAL_ADMIN_USERNAME
+        value: admin
+      - key: INITIAL_ADMIN_PASSWORD
+        value: admin123
